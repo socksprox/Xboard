@@ -4,24 +4,17 @@ namespace App\Payments;
 
 use App\Contracts\PaymentInterface;
 
-/**
- * StripePayment
- *
- * Implements a server-side Stripe Checkout Session and webhook verification
- * without requiring an external library.
- */
+// Make sure you have installed Stripe's PHP library:
+// composer require stripe/stripe-php
+
 class StripePayment implements PaymentInterface
 {
     protected $config;
 
     /**
-     * Constructor
+     * StripePayment constructor.
      *
-     * @param array $config [
-     *   'secret_key'    => 'sk_live_XXX',      // Your Stripe Secret Key
-     *   'publishable_key' (optional) => 'pk_live_XXX', // May be used client-side if needed
-     *   'webhook_secret' => 'whsec_XXX'        // Your Stripe Webhook Secret
-     * ]
+     * @param array $config
      */
     public function __construct($config)
     {
@@ -29,225 +22,149 @@ class StripePayment implements PaymentInterface
     }
 
     /**
-     * Returns the configuration form fields
-     * for display in your admin panel.
+     * The form() method returns a configuration form.
+     * Adjust fields (labels/descriptions) to your needs.
+     *
+     * @return array
      */
     public function form(): array
     {
         return [
-            'secret_key' => [
-                'label'       => 'Secret Key',
-                'description' => 'Your Stripe secret key (starts with sk_...)',
-                'type'        => 'input',
-            ],
             'publishable_key' => [
-                'label'       => 'Publishable Key',
-                'description' => 'Optional: Your Stripe publishable key (starts with pk_...)',
-                'type'        => 'input',
+                'label' => 'Stripe Publishable Key',
+                'description' => 'Your Stripe *Publishable* API Key',
+                'type' => 'input',
+            ],
+            'secret_key' => [
+                'label' => 'Stripe Secret Key',
+                'description' => 'Your Stripe *Secret* API Key',
+                'type' => 'input',
             ],
             'webhook_secret' => [
-                'label'       => 'Webhook Secret',
-                'description' => 'For verifying webhook signatures (starts with whsec_...)',
-                'type'        => 'input',
-            ],
+                'label' => 'Stripe Webhook Secret',
+                'description' => 'Secret to verify Stripe webhook signatures',
+                'type' => 'input',
+            ]
         ];
     }
 
     /**
-     * Create a Stripe Checkout Session and return a
-     * redirect URL for the user to pay.
+     * pay() should initiate a payment request.
      *
      * @param array $order [
-     *   'trade_no'    => (string) internal order ID
-     *   'total_amount'=> (int)    total amount in cents
-     *   'notify_url'  => (string) webhook callback URL
-     *   'return_url'  => (string) URL user will be sent to after successful payment
-     *   ... additional fields if needed ...
+     *   'trade_no' => string Unique order number in your system,
+     *   'total_amount' => int   Amount in *cents*,
+     *   'notify_url' => string  Webhook URL Stripe can send events to,
+     *   'return_url' => string  URL to which the user will be redirected
      * ]
-     *
      * @return array [
-     *   'type' => 1,     // 1 => redirect URL
-     *   'data' => 'https://checkout.stripe.com/pay/...' // The Stripe Checkout URL
+     *   'type' => int, // 0 for QR code, 1 for redirect URL
+     *   'data' => string // the session url or payment link
      * ]
      */
     public function pay($order): array
     {
-        // Prepare the request fields for Stripe Checkout Session
-        $fields = [
-            // For an array-based submission via cURL, we place repeated params with bracket syntax:
-            'payment_method_types[0]'                   => 'card',
-            'mode'                                      => 'payment',
-            'success_url'                               => $order['return_url'], // Where to go after success
-            'cancel_url'                                => $order['return_url'], // Or use a separate cancel_url if desired
-            'line_items[0][quantity]'                   => 1,
-            // We create a Price inline with 'price_data'
-            'line_items[0][price_data][currency]'       => 'usd',
-            // Stripe expects an integer for amount in cents
-            'line_items[0][price_data][unit_amount]'    => $order['total_amount'],
-            'line_items[0][price_data][product_data][name]' => 'Order #' . $order['trade_no'],
-            // Attach metadata with your internal order ID
-            'metadata[out_trade_no]'                    => $order['trade_no'],
-        ];
+        // Convert total_amount (cents) to the currency you use. 
+        // For example, if you're using 'usd' with cents:
+        $amount = $order['total_amount']; // in cents
 
-        // Initialize cURL
-        $ch = curl_init('https://api.stripe.com/v1/checkout/sessions');
+        // Set your Stripe Secret Key
+        \Stripe\Stripe::setApiKey($this->config['secret_key']);
 
-        // Convert $fields into an HTTP query string
-        $postData = http_build_query($fields);
+        // Create a Stripe Checkout Session
+        $session = \Stripe\Checkout\Session::create([
+            'payment_method_types' => ['card'],
+            'line_items' => [[
+                'price_data' => [
+                    'currency' => 'usd',
+                    'product_data' => [
+                        // A name for the line item. Could be your product name or "Order #xxx"
+                        'name' => 'Order ' . $order['trade_no'],
+                    ],
+                    'unit_amount' => $amount,
+                ],
+                'quantity' => 1,
+            ]],
+            'mode' => 'payment',
+            // These URLs are crucial for Stripe redirect flow
+            'success_url' => $order['return_url'] . '?session_id={CHECKOUT_SESSION_ID}',
+            'cancel_url'  => $order['return_url'] . '?cancel=1',
+            // The metadata can help identify the order when you handle the webhook
+            'metadata' => [
+                'order_id' => $order['trade_no']
+            ],
+        ]);
 
-        // Basic cURL setup
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        // Provide Stripe API key via basic auth: "Authorization: Bearer {secret_key}"
-        curl_setopt($ch, CURLOPT_USERPWD, $this->config['secret_key'] . ':');
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
-
-        // Execute
-        $response = curl_exec($ch);
-        $error    = curl_error($ch);
-        curl_close($ch);
-
-        if ($error) {
-            // Handle cURL error as appropriate
-            // Possibly throw exception or return an error response
-            return [
-                'type' => 1,
-                'data' => 'Error creating Stripe Checkout Session: ' . $error
-            ];
-        }
-
-        // Decode the JSON response
-        $json = json_decode($response, true);
-
-        if (empty($json['id']) || empty($json['url'])) {
-            // Error from Stripe or missing data
-            // Return the error message from Stripe if available
-            $errMsg = isset($json['error']['message'])
-                ? $json['error']['message']
-                : 'Unknown Stripe error.';
-            return [
-                'type' => 1,
-                'data' => 'Error creating Stripe Checkout Session: ' . $errMsg
-            ];
-        }
-
-        // Return the session URL for redirection
+        // Return the session URL so the user can be redirected to Stripe Checkout
         return [
-            'type' => 1,            // 1 => a redirect URL
-            'data' => $json['url'], // Provide the user with the session's checkout URL
+            'type' => 1, // indicates redirect URL
+            'data' => $session->url
         ];
     }
 
     /**
-     * Handle Stripe's webhook notification.
+     * notify() should handle the webhook/notification from Stripe.
+     * Verify the signature, decode the payload, and check event type.
      *
-     * @param array $params The request context. Adjust if your framework passes differently.
-     *                      You need:
-     *                       - RAW POST body (JSON)
-     *                       - 'headers' => [ 'Stripe-Signature' => '...' ]
-     *
+     * @param array $params  In many frameworks, you’ll grab the raw body, headers,
+     *                       and pass them or parse them separately.
      * @return array|bool [
-     *   'trade_no'    => (string) your order ID
-     *   'callback_no' => (string) Stripe payment ID
-     * ] or false if invalid signature or incomplete event.
+     *   'trade_no' => string,
+     *   'callback_no' => string
+     * ]  or false if invalid
      */
     public function notify($params): array|bool
     {
-        // 1) Retrieve raw body & signature header
-        $rawBody  = $params['raw_body'] ?? '';    // e.g. file_get_contents('php://input')
-        $sigHeader= $params['headers']['Stripe-Signature'] ?? '';
+        // Typically you’d get the payload and the signature from:
+        //   $payload = file_get_contents('php://input');
+        //   $sigHeader = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '';
+        //
+        // However, because this method signature just has $params, 
+        // you might store them in $params['payload'] and $params['signature_header'] 
+        // from your controller or router logic.
 
-        if (empty($rawBody) || empty($sigHeader)) {
+        // Example:
+        if (!isset($params['payload']) || !isset($params['signature_header'])) {
             return false;
         }
 
-        // 2) Verify the signature if you have a webhook_secret
-        if (! empty($this->config['webhook_secret'])) {
-            if (! $this->verifySignature($rawBody, $sigHeader, $this->config['webhook_secret'])) {
-                return false; // Invalid signature
-            }
-        }
+        $payload   = $params['payload'];
+        $sigHeader = $params['signature_header'];
 
-        // 3) Parse the event
-        $event = json_decode($rawBody, true);
-        if (empty($event['type']) || empty($event['data']['object'])) {
+        // Validate the Stripe webhook signature
+        try {
+            $event = \Stripe\Webhook::constructEvent(
+                $payload,
+                $sigHeader,
+                $this->config['webhook_secret']
+            );
+        } catch (\Exception $e) {
+            // Invalid signature
             return false;
         }
 
-        // 4) Handle the event you care about
-        //    "checkout.session.completed" indicates a successful payment
-        if ($event['type'] === 'checkout.session.completed') {
-            $session = $event['data']['object'];
+        // Check the event type and handle accordingly
+        // Common events: checkout.session.completed, payment_intent.succeeded
+        if ($event->type === 'checkout.session.completed') {
+            /** @var \Stripe\Checkout\Session $session */
+            $session = $event->data->object;
 
-            // Make sure it's paid
-            // (Stripe docs: session.payment_status == 'paid' for a successful payment)
-            if (isset($session['payment_status']) && $session['payment_status'] === 'paid') {
-                // Retrieve your internal order ID from metadata
-                $outTradeNo = $session['metadata']['out_trade_no'] ?? null;
-
-                if (! $outTradeNo) {
-                    return false; // cannot find original order
-                }
-
-                // callback_no => the Stripe Checkout Session id or the PaymentIntent
-                $callbackNo = $session['payment_intent'] ?? $session['id'];
-
-                return [
-                    'trade_no'    => $outTradeNo,
-                    'callback_no' => $callbackNo,
-                ];
+            // Retrieve the order_id from the metadata
+            $orderId = $session->metadata->order_id ?? null;
+            if (!$orderId) {
+                return false;
             }
+
+            // Return data in the format XBoard/v2board expects
+            // 'trade_no' => your internal order number
+            // 'callback_no' => a unique ID from the payment gateway (e.g., Stripe session id)
+            return [
+                'trade_no' => $orderId,
+                'callback_no' => $session->id,
+            ];
         }
 
-        // You may handle other event types if needed, or just ignore them
-        // If not recognized or not completed => false
+        // You can handle other events here if needed
         return false;
-    }
-
-    /**
-     * Verify Stripe webhook signature manually (no external library).
-     *
-     * @param string $payload      The raw JSON string from Stripe
-     * @param string $sigHeader    The 'Stripe-Signature' header value
-     * @param string $secret       Your endpoint's webhook signing secret
-     * @param int    $toleranceSec Number of seconds the timestamp can differ (default 300)
-     *
-     * @return bool
-     */
-    protected function verifySignature(
-        string $payload,
-        string $sigHeader,
-        string $secret,
-        int $toleranceSec = 300
-    ): bool {
-        // Stripe sends something like:
-        // t=162...,v1=...,v0=... in the signature header
-        // We want the 't=' and the 'v1=' part
-        $parts = [];
-        foreach (explode(',', $sigHeader) as $item) {
-            $kv = explode('=', $item, 2);
-            if (count($kv) === 2) {
-                $parts[$kv[0]] = $kv[1];
-            }
-        }
-
-        if (empty($parts['t']) || empty($parts['v1'])) {
-            return false;
-        }
-
-        $timestamp = (int) $parts['t'];
-        $expectedSig = $parts['v1'];
-
-        // Check timestamp tolerance
-        if (abs(time() - $timestamp) > $toleranceSec) {
-            return false;
-        }
-
-        // Compute our own signature
-        $signedPayload = $timestamp . '.' . $payload;
-        $signature = hash_hmac('sha256', $signedPayload, $secret);
-
-        // Compare
-        return hash_equals($signature, $expectedSig);
     }
 }
