@@ -527,7 +527,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
       "saving": "Saving...",
       "plan": {
         "title": "Subscription Plans",
-        "add": "Add Plan",
+        "add": "New Plan",
         "search": "Search plans...",
         "sort": {
           "edit": "Edit Sort",
@@ -572,7 +572,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
           }
         },
         "form": {
-          "add_title": "Add Plan",
+          "add_title": "New Plan",
           "edit_title": "Edit Plan",
           "name": {
             "label": "Plan Name",
@@ -2020,7 +2020,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
   "subscribe": {
     "plan": {
       "title": "Subscription Plans",
-      "add": "Add Plan",
+      "add": "New Plan",
       "search": "Search plans...",
       "sort": {
         "edit": "Edit Sort",
@@ -2065,7 +2065,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         }
       },
       "form": {
-        "add_title": "Add Plan",
+        "add_title": "New Plan",
         "edit_title": "Edit Plan",
         "name": {
           "label": "Plan Name",
