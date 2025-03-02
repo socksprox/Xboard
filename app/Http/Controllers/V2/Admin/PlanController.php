@@ -33,7 +33,7 @@ class PlanController extends Controller
             'transfer_enable' => 'integer|required',
             'prices' => 'array|nullable',
             'group_id' => 'integer|nullable',
-            'speed_limit' => 'integer|nullable',
+            'speed_limit' => 'integer|nullable|min:1',
             'device_limit' => 'integer|nullable',
             'capacity_limit' => 'integer|nullable',
         ]);
