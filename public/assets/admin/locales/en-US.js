@@ -701,8 +701,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "description": "When enabled, users will receive email notifications when their subscription is about to expire or when traffic is running low."
       },
       "test": {
-        "test.title": "Send a test Email",
-        "title": "Send Test Email",
+        "mail": "Send Test Email",
         "sending": "Sending...",
         "description": "Send a test email to verify the configuration",
         "success": "Test email sent successfully",
