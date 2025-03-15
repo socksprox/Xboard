@@ -71,7 +71,7 @@ git clone -b compose --depth 1 https://github.com/socksprox/Xboard ./
 ```yaml
 services:
   web:
-    image: ghcr.io/socksprox/xboard:new
+    image: ghcr.io/socksprox/xboard:master
     volumes:
       - ./.docker/.data/redis/:/data/
       - ./.env:/www/.env
@@ -91,7 +91,7 @@ services:
       - 1panel-network
 
   horizon:
-    image: ghcr.io/socksprox/xboard:new
+    image: ghcr.io/socksprox/xboard:master
     volumes:
       - ./.docker/.data/redis/:/data/
       - ./.env:/www/.env
