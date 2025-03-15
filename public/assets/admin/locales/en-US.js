@@ -697,7 +697,7 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "placeholder": "Select email template"
       },
       "remind_mail": {
-        "title": "Email Reminders",
+        "title": "Email Notices",
         "description": "When enabled, users will receive email notifications when their subscription is about to expire or when traffic is running low."
       },
       "test": {
