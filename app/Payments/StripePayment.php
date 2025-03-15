@@ -6,7 +6,7 @@ use App\Contracts\PaymentInterface;
 use Stripe\Stripe;
 use Stripe\Checkout\Session;
 use Stripe\Webhook;
-use Stripe\PaymentIntent;
+use Exception;
 
 class StripePayment implements PaymentInterface
 {
@@ -22,17 +22,14 @@ class StripePayment implements PaymentInterface
         return [
             'publishable_key' => [
                 'label' => 'Stripe Publishable Key',
-                'description' => 'Your Stripe *Publishable* API Key',
                 'type' => 'input',
             ],
             'secret_key' => [
                 'label' => 'Stripe Secret Key',
-                'description' => 'Your Stripe *Secret* API Key',
                 'type' => 'input',
             ],
             'webhook_secret' => [
-                'label' => 'Stripe Webhook Secret',
-                'description' => 'Secret to verify Stripe webhook signatures',
+                'label' => 'Webhook Secret',
                 'type' => 'input',
             ]
         ];
@@ -47,9 +44,7 @@ class StripePayment implements PaymentInterface
             'line_items' => [[
                 'price_data' => [
                     'currency' => 'usd',
-                    'product_data' => [
-                        'name' => 'Order ' . $order['trade_no'],
-                    ],
+                    'product_data' => ['name' => 'Order ' . $order['trade_no']],
                     'unit_amount' => $order['total_amount'],
                 ],
                 'quantity' => 1,
@@ -57,13 +52,9 @@ class StripePayment implements PaymentInterface
             'mode' => 'payment',
             'success_url' => $order['return_url'] . '?session_id={CHECKOUT_SESSION_ID}',
             'cancel_url' => $order['return_url'] . '?cancel=1',
-            'metadata' => [
-                'order_id' => $order['trade_no']
-            ],
+            'metadata' => ['order_id' => $order['trade_no']],
             'payment_intent_data' => [
-                'metadata' => [
-                    'order_id' => $order['trade_no']
-                ]
+                'metadata' => ['order_id' => $order['trade_no']] // Critical for payment_intent events
             ],
         ]);
 
@@ -75,12 +66,11 @@ class StripePayment implements PaymentInterface
 
     public function notify($params): array|bool
     {
-        // Retrieve the raw payload and signature from the request
         $payload = file_get_contents('php://input');
         $sigHeader = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '';
 
         if (empty($payload) || empty($sigHeader)) {
-            error_log("Stripe Webhook Error: Missing payload or signature");
+            error_log("Stripe webhook error: Missing payload or signature header.");
             return false;
         }
 
@@ -90,38 +80,32 @@ class StripePayment implements PaymentInterface
                 $sigHeader,
                 $this->config['webhook_secret']
             );
-        } catch (\Exception $e) {
-            error_log("Stripe Webhook Error: " . $e->getMessage());
+        } catch (\UnexpectedValueException $e) {
+            error_log("Stripe webhook error (invalid payload): " . $e->getMessage());
+            return false;
+        } catch (\Stripe\Exception\SignatureVerificationException $e) {
+            error_log("Stripe webhook error (invalid signature): " . $e->getMessage());
             return false;
         }
 
+        // Handle both session and payment intent events
         if ($event->type === 'checkout.session.completed' || $event->type === 'payment_intent.succeeded') {
             $session = $event->data->object;
-            $paymentIntentId = $session->payment_intent ?? null;
-            $orderId = $session->metadata->order_id ?? null;
 
-            if (!$orderId && $paymentIntentId) {
-                try {
-                    $paymentIntent = PaymentIntent::retrieve($paymentIntentId);
-                    $orderId = $paymentIntent->metadata->order_id ?? null;
-                } catch (\Exception $e) {
-                    error_log("Stripe PaymentIntent Retrieval Error: " . $e->getMessage());
-                    return false;
-                }
-            }
+            // Extract order_id from session or payment intent metadata
+            $orderId = $session->metadata->order_id ?? $session->payment_intent->metadata->order_id ?? null;
 
             if (!$orderId) {
-                error_log("Stripe Webhook Error: Order ID not found");
+                error_log("Stripe webhook error: Missing order_id in metadata.");
                 return false;
             }
 
             return [
                 'trade_no' => $orderId,
-                'callback_no' => $paymentIntentId ?: $session->id
+                'callback_no' => $session->payment_intent ?? $session->id
             ];
         }
 
-        error_log("Stripe Webhook Error: Unhandled event type " . $event->type);
         return false;
     }
 }
