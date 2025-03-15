@@ -1,111 +1,124 @@
 <?php
 
+/**
+ * 自己写别抄，抄NMB抄
+ */
 namespace App\Payments;
 
-use App\Contracts\PaymentInterface;
+use Stripe\Source;
 use Stripe\Stripe;
-use Stripe\Checkout\Session;
-use Stripe\Webhook;
-use Exception;
 
-class StripePayment implements PaymentInterface
-{
-    protected $config;
-
+class StripeCredit {
     public function __construct($config)
     {
         $this->config = $config;
     }
 
-    public function form(): array
+    public function form()
     {
         return [
-            'publishable_key' => [
-                'label' => 'Stripe Publishable Key',
+            'currency' => [
+                'label' => '货币单位',
+                'description' => '',
                 'type' => 'input',
             ],
-            'secret_key' => [
-                'label' => 'Stripe Secret Key',
+            'stripe_sk_live' => [
+                'label' => 'SK_LIVE',
+                'description' => '',
                 'type' => 'input',
             ],
-            'webhook_secret' => [
-                'label' => 'Webhook Secret',
+            'stripe_pk_live' => [
+                'label' => 'PK_LIVE',
+                'description' => '',
+                'type' => 'input',
+            ],
+            'stripe_webhook_key' => [
+                'label' => 'WebHook密钥签名',
+                'description' => '',
                 'type' => 'input',
             ]
         ];
     }
 
-    public function pay($order): array
+    public function pay($order)
     {
-        Stripe::setApiKey($this->config['secret_key']);
-
-        $session = Session::create([
-            'payment_method_types' => ['card'],
-            'line_items' => [[
-                'price_data' => [
-                    'currency' => 'usd',
-                    'product_data' => ['name' => 'Order ' . $order['trade_no']],
-                    'unit_amount' => $order['total_amount'],
-                ],
-                'quantity' => 1,
-            ]],
-            'mode' => 'payment',
-            'success_url' => $order['return_url'] . '?session_id={CHECKOUT_SESSION_ID}',
-            'cancel_url' => $order['return_url'] . '?cancel=1',
-            'metadata' => ['order_id' => $order['trade_no']],
-            'payment_intent_data' => [
-                'metadata' => ['order_id' => $order['trade_no']] // Critical for payment_intent events
-            ],
-        ]);
-
+        info($order);
+        $currency = $this->config['currency'];
+        $exchange = $this->exchange('CNY', strtoupper($currency));
+        if (!$exchange) {
+            abort(500, __('Currency conversion has timed out, please try again later'));
+        }
+        Stripe::setApiKey($this->config['stripe_sk_live']);
+        try {
+            $charge = \Stripe\Charge::create([
+                'amount' => floor($order['total_amount'] * $exchange),
+                'currency' => $currency,
+                'source' => $order['stripe_token'],
+                'metadata' => [
+                    'user_id' => $order['user_id'],
+                    'out_trade_no' => $order['trade_no'],
+                    'identifier' => ''
+                ]
+            ]);
+        } catch (\Exception $e) {
+            info($e);
+            abort(500, __('Payment failed. Please check your credit card information'));
+        }
+        if (!$charge->paid) {
+            abort(500, __('Payment failed. Please check your credit card information'));
+        }
         return [
-            'type' => 1,
-            'data' => $session->url
+            'type' => 2,
+            'data' => $charge->paid
         ];
     }
 
-    public function notify($params): array|bool
+    public function notify($params)
     {
-        $payload = file_get_contents('php://input');
-        $sigHeader = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '';
-
-        if (empty($payload) || empty($sigHeader)) {
-            error_log("Stripe webhook error: Missing payload or signature header.");
-            return false;
-        }
-
+        \Stripe\Stripe::setApiKey($this->config['stripe_sk_live']);
         try {
-            $event = Webhook::constructEvent(
-                $payload,
-                $sigHeader,
-                $this->config['webhook_secret']
+            $event = \Stripe\Webhook::constructEvent(
+                request()->getContent() ?: json_encode($_POST),
+                $_SERVER['HTTP_STRIPE_SIGNATURE'],
+                $this->config['stripe_webhook_key']
             );
-        } catch (\UnexpectedValueException $e) {
-            error_log("Stripe webhook error (invalid payload): " . $e->getMessage());
-            return false;
-        } catch (\Stripe\Exception\SignatureVerificationException $e) {
-            error_log("Stripe webhook error (invalid signature): " . $e->getMessage());
-            return false;
+        } catch (\Stripe\Error\SignatureVerification $e) {
+            abort(400);
         }
-
-        // Handle both session and payment intent events
-        if ($event->type === 'checkout.session.completed' || $event->type === 'payment_intent.succeeded') {
-            $session = $event->data->object;
-
-            // Extract order_id from session or payment intent metadata
-            $orderId = $session->metadata->order_id ?? $session->payment_intent->metadata->order_id ?? null;
-
-            if (!$orderId) {
-                error_log("Stripe webhook error: Missing order_id in metadata.");
-                return false;
-            }
-
-            return [
-                'trade_no' => $orderId,
-                'callback_no' => $session->payment_intent ?? $session->id
-            ];
+        switch ($event->type) {
+            case 'source.chargeable':
+                $object = $event->data->object;
+                \Stripe\Charge::create([
+                    'amount' => $object->amount,
+                    'currency' => $object->currency,
+                    'source' => $object->id,
+                    'metadata' => json_decode($object->metadata, true)
+                ]);
+                break;
+            case 'charge.succeeded':
+                $object = $event->data->object;
+                if ($object->status === 'succeeded') {
+                    if (!isset($object->metadata->out_trade_no) && !isset($object->source->metadata)) {
+                        return('order error');
+                    }
+                    $metaData = isset($object->metadata->out_trade_no) ? $object->metadata : $object->source->metadata;
+                    $tradeNo = $metaData->out_trade_no;
+                    return [
+                        'trade_no' => $tradeNo,
+                        'callback_no' => $object->id
+                    ];
+                }
+                break;
+            default:
+                abort(500, 'event is not support');
         }
+        return('success');
+    }
 
-        return false;
+    private function exchange($from, $to)
+    {
+        $result = file_get_contents("https://api.exchangerate-api.com/v4/latest/{$from}");
+        $result = json_decode($result, true);
+        return $result['rates'][$to];
     }
 }
