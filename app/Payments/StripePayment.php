@@ -19,17 +19,14 @@ class StripePayment implements PaymentInterface
         return [
             'publishable_key' => [
                 'label' => 'Stripe Publishable Key',
-                'description' => 'Your Stripe *Publishable* API Key',
                 'type' => 'input',
             ],
             'secret_key' => [
                 'label' => 'Stripe Secret Key',
-                'description' => 'Your Stripe *Secret* API Key',
                 'type' => 'input',
             ],
             'webhook_secret' => [
-                'label' => 'Stripe Webhook Secret',
-                'description' => 'Secret to verify Stripe webhook signatures',
+                'label' => 'Webhook Secret',
                 'type' => 'input',
             ]
         ];
@@ -52,50 +49,43 @@ class StripePayment implements PaymentInterface
             'mode' => 'payment',
             'success_url' => $order['return_url'] . '?session_id={CHECKOUT_SESSION_ID}',
             'cancel_url' => $order['return_url'] . '?cancel=1',
-            'metadata' => ['order_id' => $order['trade_no']],
-            'client_reference_id' => $order['trade_no'], // Added for compatibility
+            'client_reference_id' => $order['trade_no'],
         ]);
 
         return [
-            'type' => 1,
+            'type' => 1, // Redirect
             'data' => $session->url
         ];
     }
 
     public function notify($params): array|bool
     {
-        if (!isset($params['payload'], $params['signature_header'])) {
-            return false;
-        }
+        // EPay-style raw input handling
+        $payload = file_get_contents('php://input');
+        $sigHeader = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '';
 
         try {
             $event = \Stripe\Webhook::constructEvent(
-                $params['payload'],
-                $params['signature_header'],
+                $payload,
+                $sigHeader,
                 $this->config['webhook_secret']
             );
         } catch (\Exception $e) {
+            error_log('Stripe webhook error: ' . $e->getMessage());
             return false;
         }
 
-        // Handle both immediate and async successful payments
-        if (in_array($event->type, ['checkout.session.completed', 'checkout.session.async_payment_succeeded'])) {
+        // Mirror EPay's success handling logic
+        if ($event->type === 'checkout.session.completed') {
             $session = $event->data->object;
 
-            // Verify payment was actually successful
             if ($session->payment_status !== 'paid') {
                 return false;
             }
 
-            // Get order ID from metadata or client reference
-            $orderId = $session->metadata->order_id ?? $session->client_reference_id ?? null;
-            if (!$orderId) {
-                return false;
-            }
-
             return [
-                'trade_no' => $orderId,
-                'callback_no' => $session->payment_intent // Use payment intent ID
+                'trade_no' => $session->client_reference_id,
+                'callback_no' => $session->payment_intent
             ];
         }
 
