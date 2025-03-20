@@ -9,135 +9,99 @@ use Illuminate\Support\Facades\DB;
 
 class ResetTraffic extends Command
 {
-    protected $builder;
-
     protected $signature = 'reset:traffic';
     protected $description = 'Reset user traffic';
 
-    public function __construct()
-    {
-        parent::__construct();
-        $this->builder = User::where('expired_at', '!=', null)
-            ->where('expired_at', '>', time());
-    }
+    protected $trafficRatio = 1073741824; // 1GB in bytes
 
     public function handle()
     {
-        // Sync admin setting to config for theme compatibility
+        // 1. Force sync with admin settings
         config(['v2board.reset_traffic_method' => admin_setting('reset_traffic_method', 0)]);
 
-        ini_set('memory_limit', -1);
+        // 2. Clear cached plans
+        Plan::flushCache();
 
-        $resetMethods = Plan::select(
-            DB::raw("GROUP_CONCAT(id) as plan_ids"),
-            DB::raw("reset_traffic_method as method")
-        )->groupBy('reset_traffic_method')->get()->toArray();
-
-        foreach ($resetMethods as $resetMethod) {
-            $planIds = explode(',', $resetMethod['plan_ids']);
-
-            switch (true) {
-                case ($resetMethod['method'] === null):
-                    $this->handlePlanReset(
-                        $planIds,
-                        admin_setting('reset_traffic_method', 0)
-                    );
-                    break;
-
-                default:
-                    $this->handlePlanReset($planIds, $resetMethod['method']);
-                    break;
-            }
-        }
+        // 3. Unified reset handler
+        $this->processPlans();
     }
 
-    private function handlePlanReset(array $planIds, ?int $method): void
+    private function processPlans()
     {
-        $builder = clone $this->builder;
-        $builder->whereIn('plan_id', $planIds);
-
-        switch ($method) {
-            case 0:
-                $this->resetByMonthFirstDay($builder);
-                break;
-            case 1:
-                $this->resetByExpireDay($builder);
-                break;
-            case 3:
-                $this->resetByYearFirstDay($builder);
-                break;
-            case 4:
-                $this->resetByExpireYear($builder);
-                break;
-        }
+        Plan::groupBy('reset_traffic_method')
+            ->selectRaw('GROUP_CONCAT(id) as plan_ids, reset_traffic_method')
+            ->cursor()
+            ->each(function ($planGroup) {
+                $this->handlePlanGroup(
+                    explode(',', $planGroup->plan_ids),
+                    $planGroup->reset_traffic_method ?? admin_setting('reset_traffic_method', 0)
+                );
+            });
     }
 
-    // Unified user data fetcher
-    private function getQualifiedUsers($builder): array
+    private function handlePlanGroup(array $planIds, ?int $method)
     {
-        return $builder->with('plan')->get()
-            ->map(fn ($user) => [
-                'id' => $user->id,
-                'transfer_enable' => $user->plan->transfer_enable * 1073741824
-            ])->toArray();
+        $users = User::whereIn('plan_id', $planIds)
+            ->where('expired_at', '>', time())
+            ->with('plan')
+            ->lazy();
+
+        match ($method) {
+            0 => $this->monthlyReset($users),
+            1 => $this->expiryDayReset($users),
+            3 => $this->yearlyReset($users),
+            4 => $this->yearlyExpiryReset($users),
+            default => null
+        };
     }
 
-    private function resetByExpireYear($builder): void
-    {
-        if (date('m-d') !== date('m-d', $builder->first()->expired_at)) return;
-
-        foreach ($this->getQualifiedUsers($builder) as $user) {
-            User::where('id', $user['id'])->update([
-                'transfer_enable' => $user['transfer_enable'],
-                'u' => 0,
-                'd' => 0
-            ]);
-        }
-    }
-
-    private function resetByYearFirstDay($builder): void
-    {
-        if (date('md') !== '0101') return;
-
-        foreach ($this->getQualifiedUsers($builder) as $user) {
-            User::where('id', $user['id'])->update([
-                'transfer_enable' => $user['transfer_enable'],
-                'u' => 0,
-                'd' => 0
-            ]);
-        }
-    }
-
-    private function resetByMonthFirstDay($builder): void
+    // Reset Methods
+    private function monthlyReset($users)
     {
         if (date('d') !== '01') return;
 
-        foreach ($this->getQualifiedUsers($builder) as $user) {
-            User::where('id', $user['id'])->update([
-                'transfer_enable' => $user['transfer_enable'],
-                'u' => 0,
-                'd' => 0
-            ]);
-        }
+        $users->each(function ($user) {
+            $this->updateUserTraffic($user);
+        });
     }
 
-    private function resetByExpireDay($builder): void
+    private function expiryDayReset($users)
     {
-        $lastDay = date('t');
         $today = date('d');
+        $lastDay = date('t');
 
-        $users = $this->getQualifiedUsers($builder)
-            ->filter(function ($user) use ($today, $lastDay) {
-                $expireDay = date('d', $user->expired_at);
-                return $expireDay === $today || ($today === $lastDay && $expireDay >= $lastDay);
-            });
+        $users->each(function ($user) use ($today, $lastDay) {
+            $expiryDay = date('d', $user->expired_at);
+            if ($expiryDay === $today || ($today === $lastDay && $expiryDay >= $lastDay)) {
+                $this->updateUserTraffic($user);
+            }
+        });
+    }
 
-        foreach ($users as $user) {
-            User::where('id', $user['id'])->update([
-                'transfer_enable' => $user['transfer_enable'],
-                'u' => 0,
-                'd' => 0
-            ]);
-        }
+    private function yearlyReset($users)
+    {
+        if (date('md') !== '0101') return;
+
+        $users->each(function ($user) {
+            $this->updateUserTraffic($user);
+        });
+    }
+
+    private function yearlyExpiryReset($users)
+    {
+        if (date('md') !== date('md', $users->first()->expired_at)) return;
+
+        $users->each(function ($user) {
+            $this->updateUserTraffic($user);
+        });
+    }
+
+    private function updateUserTraffic(User $user)
+    {
+        $user->update([
+            'u' => 0,
+            'd' => 0,
+            'transfer_enable' => $user->plan->transfer_enable * $this->trafficRatio
+        ]);
     }
 }
