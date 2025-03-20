@@ -10,9 +10,25 @@ use Illuminate\Support\Facades\DB;
 class ResetTraffic extends Command
 {
     protected $builder;
+    /**
+     * The name and signature of the console command.
+     *
+     * @var string
+     */
     protected $signature = 'reset:traffic';
+
+    /**
+     * The console command description.
+     *
+     * @var string
+     */
     protected $description = '流量清空';
 
+    /**
+     * Create a new command instance.
+     *
+     * @return void
+     */
     public function __construct()
     {
         parent::__construct();
@@ -20,78 +36,78 @@ class ResetTraffic extends Command
             ->where('expired_at', '>', time());
     }
 
+    /**
+     * Execute the console command.
+     *
+     * @return mixed
+     */
     public function handle()
     {
-        // Sync config with admin settings
-        config(['v2board.reset_traffic_method' => admin_setting('reset_traffic_method', 0)]);
-
         ini_set('memory_limit', -1);
-
         $resetMethods = Plan::select(
             DB::raw("GROUP_CONCAT(`id`) as plan_ids"),
             DB::raw("reset_traffic_method as method")
-        )->groupBy('reset_traffic_method')->get()->toArray();
-
+        )
+            ->groupBy('reset_traffic_method')
+            ->get()
+            ->toArray();
         foreach ($resetMethods as $resetMethod) {
             $planIds = explode(',', $resetMethod['plan_ids']);
             switch (true) {
-                case ($resetMethod['method'] === NULL):
-                    $this->handleDefaultMethod($planIds);
-                    break;
-
-                default:
-                    $this->handleSpecificMethod($planIds, $resetMethod['method']);
-                    break;
+                case ($resetMethod['method'] === NULL): {
+                        $resetTrafficMethod = admin_setting('reset_traffic_method', 0);
+                        $builder = with(clone ($this->builder))->whereIn('plan_id', $planIds);
+                        switch ((int) $resetTrafficMethod) {
+                            // month first day
+                            case 0:
+                                $this->resetByMonthFirstDay($builder);
+                                break;
+                            // expire day
+                            case 1:
+                                $this->resetByExpireDay($builder);
+                                break;
+                            // no action
+                            case 2:
+                                break;
+                            // year first day
+                            case 3:
+                                $this->resetByYearFirstDay($builder);
+                            // year expire day
+                            case 4:
+                                $this->resetByExpireYear($builder);
+                        }
+                        break;
+                    }
+                case ($resetMethod['method'] === 0): {
+                        $builder = with(clone ($this->builder))->whereIn('plan_id', $planIds);
+                        $this->resetByMonthFirstDay($builder);
+                        break;
+                    }
+                case ($resetMethod['method'] === 1): {
+                        $builder = with(clone ($this->builder))->whereIn('plan_id', $planIds);
+                        $this->resetByExpireDay($builder);
+                        break;
+                    }
+                case ($resetMethod['method'] === 2): {
+                        break;
+                    }
+                case ($resetMethod['method'] === 3): {
+                        $builder = with(clone ($this->builder))->whereIn('plan_id', $planIds);
+                        $this->resetByYearFirstDay($builder);
+                        break;
+                    }
+                case ($resetMethod['method'] === 4): {
+                        $builder = with(clone ($this->builder))->whereIn('plan_id', $planIds);
+                        $this->resetByExpireYear($builder);
+                        break;
+                    }
             }
         }
     }
 
-    private function handleDefaultMethod(array $planIds)
-    {
-        $method = config('v2board.reset_traffic_method', 0);
-        $builder = clone $this->builder;
-        $builder->whereIn('plan_id', $planIds);
-
-        switch ($method) {
-            case 0:
-                $this->resetByMonthFirstDay($builder);
-                break;
-            case 1:
-                $this->resetByExpireDay($builder);
-                break;
-            case 3:
-                $this->resetByYearFirstDay($builder);
-                break;
-            case 4:
-                $this->resetByExpireYear($builder);
-                break;
-        }
-    }
-
-    private function handleSpecificMethod(array $planIds, int $method)
-    {
-        $builder = clone $this->builder;
-        $builder->whereIn('plan_id', $planIds);
-
-        switch ($method) {
-            case 0:
-                $this->resetByMonthFirstDay($builder);
-                break;
-            case 1:
-                $this->resetByExpireDay($builder);
-                break;
-            case 3:
-                $this->resetByYearFirstDay($builder);
-                break;
-            case 4:
-                $this->resetByExpireYear($builder);
-                break;
-        }
-    }
-
-    // Keep existing reset methods unchanged
     private function resetByExpireYear($builder): void
     {
+
         $users = $builder->with('plan')->get();
         $usersToUpdate = [];
         foreach ($users as $user) {
@@ -157,7 +173,6 @@ class ResetTraffic extends Command
             ]);
         }
     }
-
     private function resetByExpireDay($builder): void
     {
         $lastDay = date('d', strtotime('last day of +0 months'));
