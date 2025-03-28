@@ -118,6 +118,8 @@ class XboardInstall extends Command
                         'DB_USERNAME' => text(label: '请输入数据库用户名', default: 'root', required: true),
                         'DB_PASSWORD' => text(label: '请输入数据库密码', required: false),
                     ];
+                    // DEBUG: 输出当前的 MySQL 配置
+                    $this->line('DEBUG: MySQL envConfig: ' . json_encode($envConfig));
                     try {
                         Config::set("database.default", 'mysql');
                         Config::set("database.connections.mysql.host", $envConfig['DB_HOST']);
@@ -126,6 +128,8 @@ class XboardInstall extends Command
                         Config::set("database.connections.mysql.username", $envConfig['DB_USERNAME']);
                         Config::set("database.connections.mysql.password", $envConfig['DB_PASSWORD']);
                         DB::purge('mysql');
+                        // DEBUG: 输出当前设置到 config 的 MySQL 配置
+                        $this->line('DEBUG: Config set to: ' . json_encode(Config::get("database.connections.mysql")));
                         DB::connection('mysql')->getPdo();
                         $isMysqlValid = true;
                         if (!blank(DB::connection('mysql')->select('SHOW TABLES'))) {
@@ -182,7 +186,6 @@ class XboardInstall extends Command
             if (!copy(base_path() . '/.env.example', base_path() . '/.env')) {
                 abort(500, '复制环境文件失败，请检查目录权限');
             }
-            ;
             $email = !empty($adminAccount) ? $adminAccount : text(
                 label: '请输入管理员账号',
                 default: 'admin@demo.com',
