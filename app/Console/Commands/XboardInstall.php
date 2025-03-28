@@ -104,7 +104,7 @@ class XboardInstall extends Command
                         }
                     }
                 } catch (\Exception $e) {
-                    // 连接失败，输出错误消息
+                    // 连接失败, 输出错误消息
                     $this->error("数据库连接失败：" . $e->getMessage());
                 }
             } else {
@@ -118,7 +118,7 @@ class XboardInstall extends Command
                         'DB_USERNAME' => text(label: '请输入数据库用户名', default: 'root', required: true),
                         'DB_PASSWORD' => text(label: '请输入数据库密码', required: false),
                     ];
-                    // DEBUG: 输出当前的 MySQL 配置
+                    // DEBUG: 输出 aktuellen MySQL-Konfiguration
                     $this->line('DEBUG: MySQL envConfig: ' . json_encode($envConfig));
                     try {
                         Config::set("database.default", 'mysql');
@@ -128,7 +128,7 @@ class XboardInstall extends Command
                         Config::set("database.connections.mysql.username", $envConfig['DB_USERNAME']);
                         Config::set("database.connections.mysql.password", $envConfig['DB_PASSWORD']);
                         DB::purge('mysql');
-                        // DEBUG: 输出当前设置到 config 的 MySQL 配置
+                        // DEBUG: Ausgabe der gesetzten MySQL-Konfiguration
                         $this->line('DEBUG: Config set to: ' . json_encode(Config::get("database.connections.mysql")));
                         DB::connection('mysql')->getPdo();
                         $isMysqlValid = true;
@@ -142,7 +142,7 @@ class XboardInstall extends Command
                             }
                         }
                     } catch (\Exception $e) {
-                        // 连接失败，输出错误消息
+                        // 连接失败, 输出错误消息
                         $this->error("数据库连接失败：" . $e->getMessage());
                         $this->info("请重新输入数据库配置");
                     }
@@ -175,7 +175,7 @@ class XboardInstall extends Command
                     $redis->ping();
                     $isReidsValid = true;
                 } catch (\Exception $e) {
-                    // 连接失败，输出错误消息
+                    // 连接失败, 输出错误消息
                     $this->error("redis连接失败：" . $e->getMessage());
                     $this->info("请重新输入REDIS配置");
                     $enableRedis = false;
