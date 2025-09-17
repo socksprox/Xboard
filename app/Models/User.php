@@ -147,27 +147,6 @@ class User extends Authenticatable
     }
 
     /**
-     * 获取可读的最后登录IP地址
-     * 
-     * @return string|null
-     */
-    public function getLastLoginIpReadableAttribute(): ?string
-    {
-        // 最后登录IP现在直接存储为字符串，无需转换
-        return $this->last_login_ip;
-    }
-
-    /**
-     * 获取最后登录IP地址（向后兼容的方法）
-     * 
-     * @return string|null
-     */
-    public function getLastLoginIpString(): ?string
-    {
-        return $this->last_login_ip;
-    }
-
-    /**
      * 检查用户是否处于活跃状态
      */
     public function isActive(): bool
