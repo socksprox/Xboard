@@ -153,7 +153,7 @@ class GiftCardTemplate extends Model
         }
 
         // 检查允许的套餐
-        if (isset($conditions['allowed_plans']) && $user->plan_id) {
+        if (isset($conditions['allowed_plans']) && !empty($conditions['allowed_plans']) && $user->plan_id) {
             if (!in_array($user->plan_id, $conditions['allowed_plans'])) {
                 return false;
             }

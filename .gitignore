@@ -32,3 +32,6 @@ docker-compose.yaml
 bun.lockb
 compose.yaml
 .scribe
+node-backend-code
+GIFT_CARD_USER_API.md
+GIFT_CARD_ADMIN_API.md
