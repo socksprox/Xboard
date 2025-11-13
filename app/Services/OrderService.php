@@ -265,8 +265,16 @@ class OrderService
             $remainSeconds = max(0, $expiredAt->timestamp - $now->timestamp);
             $cycleRatio = $totalSeconds > 0 ? $remainSeconds / $totalSeconds : 0;
 
-            $plan = Plan::find($user->plan_id);
-            $totalTraffic = $plan?->transfer_enable * $orderMonthSum;
+            // Calculate total traffic from actual orders, not from current plan
+            $totalTraffic = 0;
+            foreach ($orders as $orderItem) {
+                $orderPlan = Plan::find($orderItem->plan_id);
+                if ($orderPlan && $orderPlan->transfer_enable) {
+                    $orderMonths = self::STR_TO_TIME[PlanService::getPeriodKey($orderItem->period)] ?? 1;
+                    $totalTraffic += $orderPlan->transfer_enable * $orderMonths;
+                }
+            }
+            
             $usedTraffic = Helper::transferToGB($user->u + $user->d);
             $remainTraffic = max(0, $totalTraffic - $usedTraffic);
             $trafficRatio = $totalTraffic > 0 ? $remainTraffic / $totalTraffic : 0;
