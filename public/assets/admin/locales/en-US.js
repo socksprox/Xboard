@@ -2762,7 +2762,6 @@ window.XBOARD_TRANSLATIONS['en-US'] = {
         "trigger_sources": {
           "auto": "Auto Trigger",
           "manual": "Manual Trigger",
-          "order": "Order",
           "cron": "Cron Job"
         }
       },
