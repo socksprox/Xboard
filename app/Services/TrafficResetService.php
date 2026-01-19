@@ -126,9 +126,14 @@ class TrafficResetService
    */
   private function getNextMonthlyReset(User $user, Carbon $from): Carbon
   {
-    $referenceDate = $user->expired_at !== null 
-      ? Carbon::createFromTimestamp($user->expired_at, config('app.timezone'))
-      : $user->created_at->copy()->setTimezone(config('app.timezone'));
+    if ($user->expired_at !== null) {
+      $referenceDate = Carbon::createFromTimestamp($user->expired_at, config('app.timezone'));
+    } else {
+      $createdAt = $user->created_at;
+      $referenceDate = $createdAt instanceof Carbon 
+        ? $createdAt->copy()->setTimezone(config('app.timezone'))
+        : Carbon::createFromTimestamp($createdAt, config('app.timezone'));
+    }
     
     $resetDay = $referenceDate->day;
     $resetTime = [$referenceDate->hour, $referenceDate->minute, $referenceDate->second];
@@ -170,9 +175,14 @@ class TrafficResetService
    */
   private function getNextYearlyReset(User $user, Carbon $from): Carbon
   {
-    $referenceDate = $user->expired_at !== null 
-      ? Carbon::createFromTimestamp($user->expired_at, config('app.timezone'))
-      : $user->created_at->copy()->setTimezone(config('app.timezone'));
+    if ($user->expired_at !== null) {
+      $referenceDate = Carbon::createFromTimestamp($user->expired_at, config('app.timezone'));
+    } else {
+      $createdAt = $user->created_at;
+      $referenceDate = $createdAt instanceof Carbon 
+        ? $createdAt->copy()->setTimezone(config('app.timezone'))
+        : Carbon::createFromTimestamp($createdAt, config('app.timezone'));
+    }
     
     $resetMonth = $referenceDate->month;
     $resetDay = $referenceDate->day;
