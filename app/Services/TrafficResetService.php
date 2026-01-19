@@ -116,6 +116,19 @@ class TrafficResetService
   }
 
   /**
+   * Get created_at timestamp for a user, fetching from DB if not loaded.
+   */
+  private function getCreatedAtTimestamp(User $user): ?int
+  {
+    if ($user->created_at !== null) {
+      return $user->created_at;
+    }
+    
+    $userWithCreatedAt = User::where('id', $user->id)->select('created_at')->first();
+    return $userWithCreatedAt?->created_at;
+  }
+
+  /**
    * Get the next monthly reset time based on the user's expiration date.
    *
    * Logic:
@@ -126,7 +139,7 @@ class TrafficResetService
    */
   private function getNextMonthlyReset(User $user, Carbon $from): Carbon
   {
-    $referenceTimestamp = $user->expired_at ?? $user->created_at;
+    $referenceTimestamp = $user->expired_at ?? $this->getCreatedAtTimestamp($user);
     if ($referenceTimestamp === null) {
       return $from->copy()->addMonth()->startOfMonth();
     }
@@ -171,7 +184,7 @@ class TrafficResetService
    */
   private function getNextYearlyReset(User $user, Carbon $from): Carbon
   {
-    $referenceTimestamp = $user->expired_at ?? $user->created_at;
+    $referenceTimestamp = $user->expired_at ?? $this->getCreatedAtTimestamp($user);
     if ($referenceTimestamp === null) {
       return $from->copy()->addYear()->startOfYear();
     }
