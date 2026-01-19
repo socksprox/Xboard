@@ -128,7 +128,7 @@ class TrafficResetService
   {
     $referenceDate = $user->expired_at !== null 
       ? Carbon::createFromTimestamp($user->expired_at, config('app.timezone'))
-      : Carbon::createFromTimestamp($user->getRawOriginal('created_at'), config('app.timezone'));
+      : $user->created_at->copy()->setTimezone(config('app.timezone'));
     
     $resetDay = $referenceDate->day;
     $resetTime = [$referenceDate->hour, $referenceDate->minute, $referenceDate->second];
@@ -172,7 +172,7 @@ class TrafficResetService
   {
     $referenceDate = $user->expired_at !== null 
       ? Carbon::createFromTimestamp($user->expired_at, config('app.timezone'))
-      : Carbon::createFromTimestamp($user->getRawOriginal('created_at'), config('app.timezone'));
+      : $user->created_at->copy()->setTimezone(config('app.timezone'));
     
     $resetMonth = $referenceDate->month;
     $resetDay = $referenceDate->day;
