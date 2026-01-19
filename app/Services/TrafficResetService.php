@@ -119,14 +119,17 @@ class TrafficResetService
    * Get the next monthly reset time based on the user's expiration date.
    *
    * Logic:
-   * 1. If the user has no expiration date, use created_at as reference for reset day.
+   * 1. If the user has no expiration date, use created_at for the reset day.
    * 2. If the user has an expiration date, use the day of that date as the monthly reset day.
    * 3. Prioritize the reset day in the current month if it has not passed yet.
    * 4. Handle cases where the day does not exist in a month (e.g., 31st in February).
    */
   private function getNextMonthlyReset(User $user, Carbon $from): Carbon
   {
-    $referenceTimestamp = $user->expired_at ?? $user->created_at ?? time();
+    $referenceTimestamp = $user->expired_at ?? $user->created_at;
+    if ($referenceTimestamp === null) {
+      return $from->copy()->addMonth()->startOfMonth();
+    }
     $referenceDate = Carbon::createFromTimestamp($referenceTimestamp, config('app.timezone'));
     $resetDay = $referenceDate->day;
     $resetTime = [$referenceDate->hour, $referenceDate->minute, $referenceDate->second];
@@ -161,14 +164,17 @@ class TrafficResetService
    * Get the next yearly reset time based on the user's expiration date.
    *
    * Logic:
-   * 1. If the user has no expiration date, use created_at as reference for reset month/day.
+   * 1. If the user has no expiration date, use created_at for the reset date.
    * 2. If the user has an expiration date, use the month and day of that date as the yearly reset date.
    * 3. Prioritize the reset date in the current year if it has not passed yet.
    * 4. Handle the case of February 29th in a leap year.
    */
   private function getNextYearlyReset(User $user, Carbon $from): Carbon
   {
-    $referenceTimestamp = $user->expired_at ?? $user->created_at ?? time();
+    $referenceTimestamp = $user->expired_at ?? $user->created_at;
+    if ($referenceTimestamp === null) {
+      return $from->copy()->addYear()->startOfYear();
+    }
     $referenceDate = Carbon::createFromTimestamp($referenceTimestamp, config('app.timezone'));
     $resetMonth = $referenceDate->month;
     $resetDay = $referenceDate->day;
