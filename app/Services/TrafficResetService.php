@@ -126,7 +126,7 @@ class TrafficResetService
    */
   private function getNextMonthlyReset(User $user, Carbon $from): Carbon
   {
-    $referenceTimestamp = $user->expired_at ?? $user->created_at;
+    $referenceTimestamp = $user->expired_at ?? $user->created_at ?? time();
     $referenceDate = Carbon::createFromTimestamp($referenceTimestamp, config('app.timezone'));
     $resetDay = $referenceDate->day;
     $resetTime = [$referenceDate->hour, $referenceDate->minute, $referenceDate->second];
@@ -168,7 +168,7 @@ class TrafficResetService
    */
   private function getNextYearlyReset(User $user, Carbon $from): Carbon
   {
-    $referenceTimestamp = $user->expired_at ?? $user->created_at;
+    $referenceTimestamp = $user->expired_at ?? $user->created_at ?? time();
     $referenceDate = Carbon::createFromTimestamp($referenceTimestamp, config('app.timezone'));
     $resetMonth = $referenceDate->month;
     $resetDay = $referenceDate->day;
