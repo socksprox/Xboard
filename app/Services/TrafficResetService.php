@@ -86,7 +86,6 @@ class TrafficResetService
       || $user->plan->reset_traffic_method === Plan::RESET_TRAFFIC_NEVER
       || ($user->plan->reset_traffic_method === Plan::RESET_TRAFFIC_FOLLOW_SYSTEM
         && (int) admin_setting('reset_traffic_method', Plan::RESET_TRAFFIC_MONTHLY) === Plan::RESET_TRAFFIC_NEVER)
-      || $user->expired_at === NULL
     ) {
       return null;
     }
@@ -120,16 +119,17 @@ class TrafficResetService
    * Get the next monthly reset time based on the user's expiration date.
    *
    * Logic:
-   * 1. If the user has no expiration date, reset on the 1st of each month.
+   * 1. If the user has no expiration date, use created_at as reference for reset day.
    * 2. If the user has an expiration date, use the day of that date as the monthly reset day.
    * 3. Prioritize the reset day in the current month if it has not passed yet.
    * 4. Handle cases where the day does not exist in a month (e.g., 31st in February).
    */
   private function getNextMonthlyReset(User $user, Carbon $from): Carbon
   {
-    $expiredAt = Carbon::createFromTimestamp($user->expired_at, config('app.timezone'));
-    $resetDay = $expiredAt->day;
-    $resetTime = [$expiredAt->hour, $expiredAt->minute, $expiredAt->second];
+    $referenceTimestamp = $user->expired_at ?? $user->created_at;
+    $referenceDate = Carbon::createFromTimestamp($referenceTimestamp, config('app.timezone'));
+    $resetDay = $referenceDate->day;
+    $resetTime = [$referenceDate->hour, $referenceDate->minute, $referenceDate->second];
     
     $currentMonthTarget = $from->copy()->day($resetDay)->setTime(...$resetTime);
     if ($currentMonthTarget->timestamp > $from->timestamp) {
@@ -161,17 +161,18 @@ class TrafficResetService
    * Get the next yearly reset time based on the user's expiration date.
    *
    * Logic:
-   * 1. If the user has no expiration date, reset on January 1st of each year.
+   * 1. If the user has no expiration date, use created_at as reference for reset month/day.
    * 2. If the user has an expiration date, use the month and day of that date as the yearly reset date.
    * 3. Prioritize the reset date in the current year if it has not passed yet.
    * 4. Handle the case of February 29th in a leap year.
    */
   private function getNextYearlyReset(User $user, Carbon $from): Carbon
   {
-    $expiredAt = Carbon::createFromTimestamp($user->expired_at, config('app.timezone'));
-    $resetMonth = $expiredAt->month;
-    $resetDay = $expiredAt->day;
-    $resetTime = [$expiredAt->hour, $expiredAt->minute, $expiredAt->second];
+    $referenceTimestamp = $user->expired_at ?? $user->created_at;
+    $referenceDate = Carbon::createFromTimestamp($referenceTimestamp, config('app.timezone'));
+    $resetMonth = $referenceDate->month;
+    $resetDay = $referenceDate->day;
+    $resetTime = [$referenceDate->hour, $referenceDate->minute, $referenceDate->second];
 
     $currentYearTarget = $from->copy()->month($resetMonth)->day($resetDay)->setTime(...$resetTime);
     if ($currentYearTarget->timestamp > $from->timestamp) {
