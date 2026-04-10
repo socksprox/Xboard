@@ -47,7 +47,7 @@ class MailLinkService
 
         $this->sendMailLinkEmail($user, $link);
 
-        return [true, $link];
+        return [true, true];
     }
 
     /**
