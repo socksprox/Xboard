@@ -35,6 +35,7 @@ class ConfigSave extends FormRequest
         'tos_url' => 'nullable|url',
         'currency' => '',
         'currency_symbol' => '',
+        'ticket_must_wait_reply' => '',
         // subscribe
         'plan_change_enable' => '',
         'reset_traffic_method' => 'in:0,1,2,3,4',
@@ -50,6 +51,8 @@ class ConfigSave extends FormRequest
         'server_pull_interval' => 'integer',
         'server_push_interval' => 'integer',
         'device_limit_mode' => 'integer',
+        'server_ws_enable' => 'boolean',
+        'server_ws_url' => 'nullable|url',
         // frontend
         'frontend_theme' => '',
         'frontend_theme_sidebar' => 'nullable|in:dark,light',
