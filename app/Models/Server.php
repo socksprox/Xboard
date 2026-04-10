@@ -53,6 +53,10 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
  * @property int|null $total 总流量
  * @property-read array|null $load_status 负载状态（包含CPU、内存、交换区、磁盘信息）
  * @property-read float $load_users 用户负载百分比（该节点在线用户数占总在线用户数的百分比）
+ * 
+ * @property int $transfer_enable 流量上限，0或者null表示不限制
+ * @property int $u 当前上传流量
+ * @property int $d 当前下载流量
  */
 class Server extends Model
 {
@@ -125,6 +129,9 @@ class Server extends Model
         'updated_at' => 'timestamp',
         'rate_time_ranges' => 'array',
         'rate_time_enable' => 'boolean',
+        'transfer_enable' => 'integer',
+        'u' => 'integer',
+        'd' => 'integer',
     ];
 
     private const MULTIPLEX_CONFIGURATION = [
@@ -149,6 +156,20 @@ class Server extends Model
         ]
     ];
 
+    private const REALITY_CONFIGURATION = [
+        'reality_settings' => [
+            'type' => 'object',
+            'fields' => [
+                'server_name' => ['type' => 'string', 'default' => null],
+                'server_port' => ['type' => 'string', 'default' => null],
+                'public_key' => ['type' => 'string', 'default' => null],
+                'private_key' => ['type' => 'string', 'default' => null],
+                'short_id' => ['type' => 'string', 'default' => null],
+                'allow_insecure' => ['type' => 'boolean', 'default' => false],
+            ]
+        ]
+    ];
+
     private const UTLS_CONFIGURATION = [
         'utls' => [
             'type' => 'object',
@@ -161,10 +182,12 @@ class Server extends Model
 
     private const PROTOCOL_CONFIGURATIONS = [
         self::TYPE_TROJAN => [
+            'tls' => ['type' => 'integer', 'default' => 1],
             'network' => ['type' => 'string', 'default' => null],
             'network_settings' => ['type' => 'array', 'default' => null],
             'server_name' => ['type' => 'string', 'default' => null],
             'allow_insecure' => ['type' => 'boolean', 'default' => false],
+            ...self::REALITY_CONFIGURATION,
             ...self::MULTIPLEX_CONFIGURATION,
             ...self::UTLS_CONFIGURATION
         ],
@@ -181,19 +204,18 @@ class Server extends Model
             'tls' => ['type' => 'integer', 'default' => 0],
             'tls_settings' => ['type' => 'array', 'default' => null],
             'flow' => ['type' => 'string', 'default' => null],
-            'network' => ['type' => 'string', 'default' => null],
-            'network_settings' => ['type' => 'array', 'default' => null],
-            'reality_settings' => [
+            'encryption' => [
                 'type' => 'object',
+                'default' => null,
                 'fields' => [
-                    'allow_insecure' => ['type' => 'boolean', 'default' => false],
-                    'server_port' => ['type' => 'string', 'default' => null],
-                    'server_name' => ['type' => 'string', 'default' => null],
-                    'public_key' => ['type' => 'string', 'default' => null],
-                    'private_key' => ['type' => 'string', 'default' => null],
-                    'short_id' => ['type' => 'string', 'default' => null]
+                    'enabled' => ['type' => 'boolean', 'default' => false],
+                    'encryption' => ['type' => 'string', 'default' => null],  // 客户端公钥
+                    'decryption' => ['type' => 'string', 'default' => null],   // 服务端私钥
                 ]
             ],
+            'network' => ['type' => 'string', 'default' => null],
+            'network_settings' => ['type' => 'array', 'default' => null],
+            ...self::REALITY_CONFIGURATION,
             ...self::MULTIPLEX_CONFIGURATION,
             ...self::UTLS_CONFIGURATION
         ],

@@ -38,7 +38,7 @@ class LoginService
         }
 
         // 查找用户
-        $user = User::where('email', $email)->first();
+        $user = User::byEmail($email)->first();
         if (!$user) {
             return [false, [400, __('Incorrect email or password')]];
         }
@@ -108,7 +108,7 @@ class LoginService
         }
 
         // 查找用户
-        $user = User::where('email', $email)->first();
+        $user = User::byEmail($email)->first();
         if (!$user) {
             return [false, [400, __('This email is not registered in the system')]];
         }

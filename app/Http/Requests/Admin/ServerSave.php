@@ -42,10 +42,17 @@ class ServerSave extends FormRequest
             'tls_settings.allow_insecure' => 'nullable|boolean',
         ],
         'trojan' => [
+            'tls' => 'nullable|integer',
             'network' => 'required|string',
             'network_settings' => 'nullable|array',
             'server_name' => 'nullable|string',
             'allow_insecure' => 'nullable|boolean',
+            'reality_settings.allow_insecure' => 'nullable|boolean',
+            'reality_settings.server_name' => 'nullable|string',
+            'reality_settings.server_port' => 'nullable|integer',
+            'reality_settings.public_key' => 'nullable|string',
+            'reality_settings.private_key' => 'nullable|string',
+            'reality_settings.short_id' => 'nullable|string',
         ],
         'hysteria' => [
             'version' => 'required|integer',
@@ -64,6 +71,10 @@ class ServerSave extends FormRequest
             'network' => 'required|string',
             'network_settings' => 'nullable|array',
             'flow' => 'nullable|string',
+            'encryption' => 'nullable|array',
+            'encryption.enabled' => 'nullable|boolean',
+            'encryption.encryption' => 'nullable|string', 
+            'encryption.decryption' => 'nullable|string', 
             'tls_settings.server_name' => 'nullable|string',
             'tls_settings.allow_insecure' => 'nullable|boolean',
             'reality_settings.allow_insecure' => 'nullable|boolean',
@@ -121,6 +132,7 @@ class ServerSave extends FormRequest
             'rate_time_ranges.*.end' => 'required_with:rate_time_ranges|string|date_format:H:i',
             'rate_time_ranges.*.rate' => 'required_with:rate_time_ranges|numeric|min:0',
             'protocol_settings' => 'array',
+            'transfer_enable' => 'nullable|integer|min:0',
         ];
     }
 
@@ -193,6 +205,8 @@ class ServerSave extends FormRequest
             'protocol_settings.*.string' => ':attribute 必须是字符串',
             'protocol_settings.*.integer' => ':attribute 必须是整数',
             'protocol_settings.*.in' => ':attribute 的值不合法',
+            'transfer_enable.integer' => '流量上限必须是整数',
+            'transfer_enable.min' => '流量上限不能小于0',
         ];
     }
 }

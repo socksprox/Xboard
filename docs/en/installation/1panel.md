@@ -84,7 +84,7 @@ services:
   web:
     image: ghcr.io/cedar2025/xboard:new
     volumes:
-      - ./.docker/.data/redis/:/data/
+      - redis-data:/data
       - ./.env:/www/.env
       - ./.docker/.data/:/www/.docker/.data
       - ./storage/logs:/www/storage/logs
@@ -104,7 +104,7 @@ services:
   horizon:
     image: ghcr.io/cedar2025/xboard:new
     volumes:
-      - ./.docker/.data/redis/:/data/
+      - redis-data:/data
       - ./.env:/www/.env
       - ./.docker/.data/:/www/.docker/.data
       - ./storage/logs:/www/storage/logs
@@ -115,6 +115,22 @@ services:
       - 1panel-network
     depends_on:
       - redis
+  ws-server:
+    image: ghcr.io/cedar2025/xboard:new
+    volumes:
+      - redis-data:/data
+      - ./.env:/www/.env
+      - ./.docker/.data/:/www/.docker/.data
+      - ./storage/logs:/www/storage/logs
+      - ./plugins:/www/plugins
+    restart: on-failure
+    ports:
+      - 8076:8076
+    networks:
+      - 1panel-network
+    command: php artisan ws-server start
+    depends_on:
+      - redis
 
   redis:
     image: redis:7-alpine
@@ -123,7 +139,10 @@ services:
     networks:
       - 1panel-network
     volumes:
-      - ./.docker/.data/redis:/data
+      - redis-data:/data
+
+volumes:
+  redis-data:
 
 networks:
   1panel-network:

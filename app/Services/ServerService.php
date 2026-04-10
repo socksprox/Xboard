@@ -43,6 +43,11 @@ class ServerService
     {
         $servers = Server::whereJsonContains('group_ids', (string) $user->group_id)
             ->where('show', true)
+            ->where(function ($query) {
+                $query->whereNull('transfer_enable')
+                    ->orWhere('transfer_enable', 0)
+                    ->orWhereRaw('u + d < transfer_enable');
+            })
             ->orderBy('sort', 'ASC')
             ->get()
             ->append(['last_check_at', 'last_push_at', 'online', 'is_online', 'available_status', 'cache_key', 'server_key', 'load_status', 'load_users']);
@@ -169,11 +174,20 @@ class ServerService
                 'host' => $host,
                 'server_name' => $protocolSettings['server_name'],
                 'multiplex' => data_get($protocolSettings, 'multiplex'),
+                'tls' => (int) $protocolSettings['tls'],
+                'tls_settings' => match ((int) $protocolSettings['tls']) {
+                        2 => $protocolSettings['reality_settings'],
+                        default => null,
+                    },
             ],
             'vless' => [
                 ...$baseConfig,
                 'tls' => (int) $protocolSettings['tls'],
                 'flow' => $protocolSettings['flow'],
+                'decryption' => match (data_get($protocolSettings, 'encryption.enabled')) {
+                    true => data_get($protocolSettings, 'encryption.decryption'),
+                    default => null,
+                },
                 'tls_settings' => match ((int) $protocolSettings['tls']) {
                         2 => $protocolSettings['reality_settings'],
                         default => $protocolSettings['tls_settings'],
@@ -240,6 +254,11 @@ class ServerService
             default => [],
         };
 
+        // $response = array_filter(
+        //     $response,
+        //     static fn ($value) => $value !== null
+        // );
+
         if (!empty($node['route_ids'])) {
             $response['routes'] = self::getRoutes($node['route_ids']);
         }
@@ -252,7 +271,7 @@ class ServerService
             $response['custom_routes'] = $node['custom_routes'];
         }
 
-        if (!empty($node['cert_config'])) {
+        if (!empty($node['cert_config']) && data_get($node['cert_config'],'cert_mode') !== 'none' ) {
             $response['cert_config'] = $node['cert_config'];
         }
 
@@ -265,7 +284,7 @@ class ServerService
      * @param string $serverType
      * @return Server|null
      */
-    public static function getServer($serverId, ?string $serverType)
+    public static function getServer($serverId, ?string $serverType = null): Server | null
     {
         return Server::query()
             ->when($serverType, function ($query) use ($serverType) {

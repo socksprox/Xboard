@@ -14,6 +14,7 @@ class Surfboard extends AbstractProtocol
         Server::TYPE_SHADOWSOCKS,
         Server::TYPE_VMESS,
         Server::TYPE_TROJAN,
+        Server::TYPE_ANYTLS,
     ];
     const CUSTOM_TEMPLATE_FILE = 'resources/rules/custom.surfboard.conf';
     const DEFAULT_TEMPLATE_FILE = 'resources/rules/default.surfboard.conf';
@@ -36,7 +37,10 @@ class Surfboard extends AbstractProtocol
                     'aes-128-gcm',
                     'aes-192-gcm',
                     'aes-256-gcm',
-                    'chacha20-ietf-poly1305'
+                    'chacha20-ietf-poly1305',
+                    '2022-blake3-aes-128-gcm',
+                    '2022-blake3-aes-256-gcm',
+                    '2022-blake3-chacha20-poly1305'      
                 ])
             ) {
                 // [Proxy]
@@ -54,6 +58,10 @@ class Surfboard extends AbstractProtocol
                 // [Proxy]
                 $proxies .= self::buildTrojan($item['password'], $item);
                 // [Proxy Group]
+                $proxyGroup .= $item['name'] . ', ';
+            }
+            if ($item['type'] === Server::TYPE_ANYTLS) {
+                $proxies .= self::buildAnyTLS($item['password'], $item);
                 $proxyGroup .= $item['name'] . ', ';
             }
         }
@@ -74,7 +82,7 @@ class Surfboard extends AbstractProtocol
         $totalTraffic = round($user['transfer_enable'] / (1024 * 1024 * 1024), 2);
         $unusedTraffic = $totalTraffic - $useTraffic;
         $expireDate = $user['expired_at'] === NULL ? '长期有效' : date('Y-m-d H:i:s', $user['expired_at']);
-        $subscribeInfo = "title={$appName}订阅信息, content=上传流量：{$upload}GB\\n下载流量：{$download}GB\\n剩余流量: { $unusedTraffic }GB\\n套餐流量：{$totalTraffic}GB\\n到期时间：{$expireDate}";
+        $subscribeInfo = "title={$appName}订阅信息, content=上传流量：{$upload}GB\\n下载流量：{$download}GB\\n剩余流量：{$unusedTraffic}GB\\n套餐流量：{$totalTraffic}GB\\n到期时间：{$expireDate}";
         $config = str_replace('$subscribe_info', $subscribeInfo, $config);
 
         return response($config, 200)
@@ -89,7 +97,7 @@ class Surfboard extends AbstractProtocol
             "{$server['name']}=ss",
             "{$server['host']}",
             "{$server['port']}",
-            "encrypt-method={$protocol_settings['cipher']}",
+            "encrypt-method=" . data_get($protocol_settings, 'cipher'),
             "password={$password}",
             'tfo=true',
             'udp-relay=true'
@@ -146,10 +154,12 @@ class Surfboard extends AbstractProtocol
             array_push($config, 'tls=true');
             if (data_get($protocol_settings, 'tls_settings')) {
                 $tlsSettings = data_get($protocol_settings, 'tls_settings');
-                if (!!data_get($tlsSettings, 'allowInsecure'))
-                    array_push($config, 'skip-cert-verify=' . ($tlsSettings['allowInsecure'] ? 'true' : 'false'));
-                if (!!data_get($tlsSettings, 'serverName'))
-                    array_push($config, "sni={$tlsSettings['serverName']}");
+                if (data_get($tlsSettings, 'allow_insecure')) {
+                    array_push($config, 'skip-cert-verify=' . ($tlsSettings['allow_insecure'] ? 'true' : 'false'));
+                }
+                if ($sni = data_get($tlsSettings, 'server_name')) {
+                    array_push($config, "sni={$sni}");
+                }
             }
         }
         if (data_get($protocol_settings, 'network') === 'ws') {
@@ -176,7 +186,7 @@ class Surfboard extends AbstractProtocol
             "{$server['host']}",
             "{$server['port']}",
             "password={$password}",
-            $protocol_settings['server_name'] ? "sni={$protocol_settings['server_name']}" : "",
+            data_get($protocol_settings, 'server_name') ? "sni=" . data_get($protocol_settings, 'server_name') : "",
             'tfo=true',
             'udp-relay=true'
         ];
@@ -187,5 +197,33 @@ class Surfboard extends AbstractProtocol
         $uri = implode(',', $config);
         $uri .= "\r\n";
         return $uri;
+    }
+    
+    public static function buildAnyTLS($password, $server)
+    {
+        $protocol_settings = data_get($server, 'protocol_settings', []);
+    
+        $config = [
+            "{$server['name']}=anytls",
+            "{$server['host']}",
+            "{$server['port']}",
+            "password={$password}",
+            "tfo=true",
+            "udp-relay=true"
+        ];
+    
+        // SNI
+        if ($serverName = data_get($protocol_settings, 'tls.server_name')) {
+            $config[] = "sni={$serverName}";
+        }
+    
+        // 跳过证书校验
+        if (data_get($protocol_settings, 'tls.allow_insecure')) {
+            $config[] = "skip-cert-verify=true";
+        }
+    
+        $config = array_filter($config);
+    
+        return implode(',', $config) . "\r\n";
     }
 }
