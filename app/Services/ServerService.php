@@ -55,6 +55,7 @@ class ServerService
                 $server->port = (int) $server->port;
             }
             $server->password = $server->generateServerPassword($user);
+            $server->rate = $server->getCurrentRate();
             return $server;
         })->toArray();
 
