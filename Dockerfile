@@ -1,6 +1,7 @@
 FROM phpswoole/swoole:php8.2-alpine
 
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # Install PHP extensions one by one with lower optimization level for ARM64 compatibility
 RUN CFLAGS="-O0" install-php-extensions pcntl && \
