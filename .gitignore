@@ -11,13 +11,11 @@
 .env.backup
 .phpunit.result.cache
 .idea
-.lock
 Homestead.json
 Homestead.yaml
 npm-debug.log
 yarn-error.log
 composer.phar
-composer.lock
 yarn.lock
 docker-compose.yml
 .DS_Store
@@ -32,6 +30,8 @@ docker-compose.yaml
 bun.lockb
 compose.yaml
 .scribe
+compose.host.yaml
+compose.split.yaml
 node-backend-code
 GIFT_CARD_USER_API.md
 GIFT_CARD_ADMIN_API.md

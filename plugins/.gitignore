@@ -1,11 +1,5 @@
 *
 !.gitignore
-!AlipayF2f/
-!Btcpay
-!Coinbase
-!Epay
-!Mgate
-!Telegram
 !SfyGroupManager/
 !ReferralApi/
 !SfyApiExtension/
