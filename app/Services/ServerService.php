@@ -190,6 +190,18 @@ class ServerService
                 'total' => (int) ($status['disk']['total'] ?? 0),
                 'used' => (int) ($status['disk']['used'] ?? 0),
             ],
+            'bandwidth' => [
+                'up' => (int) ($status['bandwidth']['up'] ?? 0),
+                'down' => (int) ($status['bandwidth']['down'] ?? 0),
+            ],
+            'utilization' => [
+                'fullness_score' => (float) ($status['utilization']['fullness_score'] ?? 0),
+                'is_full' => (bool) ($status['utilization']['is_full'] ?? false),
+                'capacity_settings' => [
+                    'bandwidth_capacity_mbps' => (int) ($status['utilization']['capacity_settings']['bandwidth_capacity_mbps'] ?? 0),
+                    'session_ceiling' => (int) ($status['utilization']['capacity_settings']['session_ceiling'] ?? 0),
+                ],
+            ],
             'updated_at' => now()->timestamp,
             'kernel_status' => $status['kernel_status'] ?? null,
         ];
