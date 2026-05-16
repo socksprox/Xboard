@@ -153,6 +153,7 @@ class ConfigController extends Controller
                 'email_password' => admin_setting('email_password'),
                 'email_encryption' => admin_setting('email_encryption'),
                 'email_from_address' => admin_setting('email_from_address'),
+                'email_template' => admin_setting('email_template', 'default'),
                 'remind_mail_enable' => (bool) admin_setting('remind_mail_enable', false),
             ],
             'telegram' => [

@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\View;
 
 class MailService
 {
@@ -293,7 +294,12 @@ class MailService
                 });
                 $params['template_name'] = 'db:' . $templateName;
             } else {
-                $params['template_name'] = 'mail.default.' . $templateName;
+                $mailTheme = admin_setting('email_template', 'default');
+                $viewName = "mail.{$mailTheme}.{$templateName}";
+                if (!View::exists($viewName)) {
+                    $viewName = "mail.default.{$templateName}";
+                }
+                $params['template_name'] = $viewName;
                 Mail::send(
                     $params['template_name'],
                     $params['template_value'],

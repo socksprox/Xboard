@@ -66,6 +66,7 @@ class ConfigSave extends FormRequest
         'email_password' => '',
         'email_encryption' => '',
         'email_from_address' => '',
+        'email_template' => 'nullable|string|max:64',
         'remind_mail_enable' => '',
         // telegram
         'telegram_bot_enable' => '',
