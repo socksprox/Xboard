@@ -22,6 +22,9 @@ class PaymentController extends Controller
                 HookManager::call('payment.notify.failed', [$method, $uuid, $request]);
                 return $this->fail([422, 'verify error']);
             }
+            if (is_array($verify) && !empty($verify['skip_handle'])) {
+                return $verify['custom_result'] ?? response('', 200);
+            }
             HookManager::call('payment.notify.verified', $verify);
             if (!$this->handle($verify['trade_no'], $verify['callback_no'])) {
                 return $this->fail([400, 'handle error']);
