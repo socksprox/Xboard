@@ -43,6 +43,7 @@ class ConfigSave extends FormRequest
         'new_order_event_id' => '',
         'renew_order_event_id' => '',
         'change_order_event_id' => '',
+        'refund_revoke_access_default' => '',
         'show_info_to_server_enable' => '',
         'show_protocol_to_server_enable' => '',
         'subscribe_path' => '',

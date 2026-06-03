@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $surplus_amount
  * @property int $type
  * @property int $status
+ * @property int $refund_status
  * @property array|null $surplus_order_ids
  * @property int|null $coupon_id
  * @property int $created_at
@@ -40,6 +41,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property-read Payment|null $payment
  * @property-read User $user
  * @property-read \Illuminate\Database\Eloquent\Collection<int, CommissionLog> $commission_log
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, Refund> $refunds
  */
 class Order extends Model
 {
@@ -58,6 +60,16 @@ class Order extends Model
     const STATUS_CANCELLED = 2; // 已取消
     const STATUS_COMPLETED = 3; // 已完成
     const STATUS_DISCOUNTED = 4; // 已折抵
+
+    const REFUND_STATUS_NONE = 0;
+    const REFUND_STATUS_PARTIAL = 1;
+    const REFUND_STATUS_FULL = 2;
+
+    public static $refundStatusMap = [
+        self::REFUND_STATUS_NONE => '无退款',
+        self::REFUND_STATUS_PARTIAL => '部分退款',
+        self::REFUND_STATUS_FULL => '已退款',
+    ];
 
     public static $statusMap = [
         self::STATUS_PENDING => '待支付',
@@ -116,5 +128,13 @@ class Order extends Model
     public function commission_log(): HasMany
     {
         return $this->hasMany(CommissionLog::class, 'trade_no', 'trade_no');
+    }
+
+    /**
+     * 获取与订单关联的退款记录
+     */
+    public function refunds(): HasMany
+    {
+        return $this->hasMany(Refund::class, 'order_id', 'id');
     }
 }

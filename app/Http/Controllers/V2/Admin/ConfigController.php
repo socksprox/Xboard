@@ -125,6 +125,7 @@ class ConfigController extends Controller
                 'new_order_event_id' => (int) admin_setting('new_order_event_id', 0),
                 'renew_order_event_id' => (int) admin_setting('renew_order_event_id', 0),
                 'change_order_event_id' => (int) admin_setting('change_order_event_id', 0),
+                'refund_revoke_access_default' => (bool) admin_setting('refund_revoke_access_default', 0),
                 'show_info_to_server_enable' => (bool) admin_setting('show_info_to_server_enable', 0),
                 'show_protocol_to_server_enable' => (bool) admin_setting('show_protocol_to_server_enable', 0),
                 'default_remind_expire' => (bool) admin_setting('default_remind_expire', 1),

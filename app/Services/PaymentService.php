@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Contracts\RefundableInterface;
 use App\Exceptions\ApiException;
+use App\Models\Order;
 use App\Models\Payment;
 use App\Services\Plugin\PluginManager;
 use App\Services\Plugin\HookManager;
@@ -89,6 +91,23 @@ class PaymentService
             'user_id' => $order['user_id'],
             'stripe_token' => $order['stripe_token']
         ]);
+    }
+
+    public function canRefund(): bool
+    {
+        return $this->payment instanceof RefundableInterface;
+    }
+
+    /**
+     * @return array{code: int, refund_id?: string|null, amount?: int|string|null, msg?: string}
+     */
+    public function refund(Order $order, int $amount): array
+    {
+        if (!$this->canRefund()) {
+            return ['code' => -1, 'msg' => 'This payment gateway does not support online refunds.'];
+        }
+
+        return $this->payment->refund($order, $amount);
     }
 
     public function form()

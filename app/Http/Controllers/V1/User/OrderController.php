@@ -8,6 +8,7 @@ use App\Http\Requests\User\OrderSave;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\Refund;
 use App\Models\Plan;
 use App\Models\User;
 use App\Services\CouponService;
@@ -26,6 +27,9 @@ class OrderController extends Controller
             'status' => 'nullable|integer|in:0,1,2,3',
         ]);
         $orders = Order::with('plan')
+            ->withSum(['refunds as refunded_amount' => function ($query) {
+                $query->where('status', Refund::STATUS_SUCCEEDED);
+            }], 'amount')
             ->where('user_id', $request->user()->id)
             ->when($request->input('status') !== null, function ($query) use ($request) {
                 $query->where('status', $request->input('status'));
@@ -41,7 +45,10 @@ class OrderController extends Controller
         $request->validate([
             'trade_no' => 'required|string',
         ]);
-        $order = Order::with(['payment', 'plan'])
+        $order = Order::with(['payment', 'plan', 'refunds'])
+            ->withSum(['refunds as refunded_amount' => function ($query) {
+                $query->where('status', Refund::STATUS_SUCCEEDED);
+            }], 'amount')
             ->where('user_id', $request->user()->id)
             ->where('trade_no', $request->input('trade_no'))
             ->first();
