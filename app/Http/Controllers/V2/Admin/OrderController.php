@@ -7,6 +7,7 @@ use App\Http\Requests\Admin\OrderAssign;
 use App\Http\Requests\Admin\OrderUpdate;
 use App\Models\Order;
 use App\Models\Plan;
+use App\Models\Refund;
 use App\Models\User;
 use App\Services\OrderService;
 use App\Services\PlanService;
@@ -22,7 +23,11 @@ class OrderController extends Controller
 
     public function detail(Request $request)
     {
-        $order = Order::with(['user', 'plan', 'commission_log', 'invite_user'])->find($request->input('id'));
+        $order = Order::with(['user', 'plan', 'commission_log', 'invite_user'])
+            ->withSum(['refunds as refunded_amount' => function ($query) {
+                $query->where('status', Refund::STATUS_SUCCEEDED);
+            }], 'amount')
+            ->find($request->input('id'));
         if (!$order)
             return $this->fail([400202, '订单不存在']);
         if ($order->surplus_order_ids) {
@@ -36,7 +41,10 @@ class OrderController extends Controller
     {
         $current = $request->input('current', 1);
         $pageSize = $request->input('pageSize', 10);
-        $orderModel = Order::with('plan:id,name');
+        $orderModel = Order::with('plan:id,name')
+            ->withSum(['refunds as refunded_amount' => function ($query) {
+                $query->where('status', Refund::STATUS_SUCCEEDED);
+            }], 'amount');
 
         if ($request->boolean('is_commission')) {
             $orderModel->whereNotNull('invite_user_id')
