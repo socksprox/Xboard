@@ -34,6 +34,7 @@ class OrderController extends Controller
             $order['surplus_orders'] = Order::whereIn('id', $order->surplus_order_ids)->get();
         }
         $order['period'] = PlanService::getLegacyPeriod((string) $order->period);
+        $order->refunded_amount = (int) ($order->refunded_amount ?? 0);
         return $this->success($order);
     }
 
@@ -65,6 +66,7 @@ class OrderController extends Controller
         $paginatedResults->getCollection()->transform(function ($order) {
             $orderArray = $order->toArray();
             $orderArray['period'] = PlanService::getLegacyPeriod((string) $order->period);
+            $orderArray['refunded_amount'] = (int) ($orderArray['refunded_amount'] ?? 0);
             return $orderArray;
         });
 

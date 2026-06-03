@@ -23,6 +23,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $type
  * @property int $status
  * @property int $refund_status
+ * @property int|null $refunded_amount
  * @property array|null $surplus_order_ids
  * @property int|null $coupon_id
  * @property int $created_at
@@ -52,7 +53,9 @@ class Order extends Model
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
         'surplus_order_ids' => 'array',
-        'handling_amount' => 'integer'
+        'handling_amount' => 'integer',
+        'refund_status' => 'integer',
+        'refunded_amount' => 'integer',
     ];
 
     const STATUS_PENDING = 0; // 待支付
