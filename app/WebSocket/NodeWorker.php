@@ -7,6 +7,7 @@ use App\Models\ServerMachine;
 use App\Services\DeviceStateService;
 use App\Services\NodeRegistry;
 use App\Services\ServerService;
+use App\Support\Setting;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
@@ -135,6 +136,14 @@ class NodeWorker
 
     public function onWebSocketConnect(TcpConnection $conn, $httpMessage): void
     {
+        // This is a long-running Workerman worker with no request/job scope
+        // reset, so the scoped Setting instance otherwise lives for the whole
+        // process lifetime. Drop its in-process snapshot here so authentication
+        // (and the full-sync that follows) always validates against the current
+        // panel config — e.g. a rotated server_token — and self-heals from a
+        // failed initial load instead of silently rejecting every node forever.
+        app(Setting::class)->refresh();
+
         $queryString = '';
         if (is_string($httpMessage)) {
             $queryString = parse_url($httpMessage, PHP_URL_QUERY) ?? '';
