@@ -675,6 +675,10 @@ class UserController extends Controller
         } // all: ignore filter/sort
 
         try {
+            $userIdsToBan = (clone $builder)->pluck('id');
+            User::whereIn('id', $userIdsToBan)->each(function (User $user) {
+                (new AuthService($user))->removeAllSessions();
+            });
             $builder->update([
                 'banned' => 1
             ]);

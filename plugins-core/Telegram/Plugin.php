@@ -386,8 +386,17 @@ class Plugin extends AbstractPlugin
 
   public function handleTicketReply(object $msg, array $matches): void
   {
+    if (!$this->checkPrivateChat($msg)) {
+      return;
+    }
+
     $user = $this->getBoundUser($msg);
     if (!$user) {
+      return;
+    }
+
+    if (!$user->is_admin && !$user->is_staff) {
+      $this->sendMessage($msg, '无权限回复工单');
       return;
     }
 

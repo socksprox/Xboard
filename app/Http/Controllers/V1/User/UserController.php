@@ -72,6 +72,7 @@ class UserController extends Controller
         $user->password = password_hash($request->input('new_password'), PASSWORD_DEFAULT);
         $user->password_algo = NULL;
         $user->password_salt = NULL;
+        $user->telegram_id = null;
         if (!$user->save()) {
             return $this->fail([400, __('Save failed')]);
         }
@@ -167,6 +168,7 @@ class UserController extends Controller
         $user = $request->user();
         $user->uuid = Helper::guid(true);
         $user->token = Helper::guid();
+        $user->telegram_id = null;
         if (!$user->save()) {
             return $this->fail([400, __('Reset failed')]);
         }
