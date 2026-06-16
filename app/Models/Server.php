@@ -126,6 +126,7 @@ class Server extends Model
         'last_push_at' => 'integer',
         'show' => 'boolean',
         'enabled' => 'boolean',
+        'torrent_mode' => 'string',
         'created_at' => 'timestamp',
         'updated_at' => 'timestamp',
         'rate_time_ranges' => 'array',

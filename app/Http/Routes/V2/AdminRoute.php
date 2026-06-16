@@ -10,6 +10,7 @@ use App\Http\Controllers\V2\Admin\Server\ManageController;
 use App\Http\Controllers\V2\Admin\Server\MachineController;
 use App\Http\Controllers\V2\Admin\OrderController;
 use App\Http\Controllers\V2\Admin\RefundController;
+use App\Http\Controllers\V2\Admin\UserOffenseController;
 use App\Http\Controllers\V2\Admin\UserController;
 use App\Http\Controllers\V2\Admin\StatController;
 use App\Http\Controllers\V2\Admin\NoticeController;
@@ -139,6 +140,16 @@ class AdminRoute
                 $router->post('/resetSecret', [UserController::class, 'resetSecret']);
                 $router->post('/setInviteUser', [UserController::class, 'setInviteUser']);
                 $router->post('/destroy', [UserController::class, 'destroy']);
+                $router->post('/offense/fetch', [UserOffenseController::class, 'fetchOffenses']);
+                $router->post('/restriction/fetch', [UserOffenseController::class, 'fetchRestrictions']);
+                $router->post('/restriction/revoke', [UserOffenseController::class, 'revokeRestriction']);
+            });
+
+            $router->group([
+                'prefix' => 'torrent'
+            ], function ($router) {
+                $router->get('/policy', [UserOffenseController::class, 'getTorrentPolicy']);
+                $router->post('/policy/save', [UserOffenseController::class, 'saveTorrentPolicy']);
             });
 
             // Stat

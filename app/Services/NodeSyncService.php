@@ -64,25 +64,55 @@ class NodeSyncService
             if (!self::isNodeOnline($server->id))
                 continue;
 
-            if ($user->isAvailable()) {
-                self::push($server->id, 'sync.user.delta', [
-                    'action' => 'add',
-                    'users' => [
-                        [
-                            'id' => $user->id,
-                            'uuid' => $user->uuid,
-                            'speed_limit' => $user->speed_limit,
-                            'device_limit' => $user->device_limit,
-                        ]
-                    ],
-                ]);
-            } else {
-                self::push($server->id, 'sync.user.delta', [
-                    'action' => 'remove',
-                    'users' => [['id' => $user->id]],
-                ]);
-            }
+            self::pushUserDeltaForServer($user, $server);
         }
+    }
+
+    /**
+     * Push user removal to specific server IDs (e.g. after offense restriction).
+     *
+     * @param int[] $serverIds
+     */
+    public static function notifyUserRemovedFromServers(int $userId, array $serverIds): void
+    {
+        foreach (array_unique($serverIds) as $serverId) {
+            if (!self::isNodeOnline((int) $serverId))
+                continue;
+
+            self::push((int) $serverId, 'sync.user.delta', [
+                'action' => 'remove',
+                'users' => [['id' => $userId]],
+            ]);
+        }
+    }
+
+    private static function shouldSyncUserToServer(User $user, Server $server): bool
+    {
+        return $user->isAvailable()
+            && !UserRestrictionService::isRestricted((int) $user->id, (int) $server->id);
+    }
+
+    private static function pushUserDeltaForServer(User $user, Server $server): void
+    {
+        if (self::shouldSyncUserToServer($user, $server)) {
+            self::push($server->id, 'sync.user.delta', [
+                'action' => 'add',
+                'users' => [
+                    [
+                        'id' => $user->id,
+                        'uuid' => $user->uuid,
+                        'speed_limit' => $user->speed_limit,
+                        'device_limit' => $user->device_limit,
+                    ]
+                ],
+            ]);
+            return;
+        }
+
+        self::push($server->id, 'sync.user.delta', [
+            'action' => 'remove',
+            'users' => [['id' => $user->id]],
+        ]);
     }
 
     /**

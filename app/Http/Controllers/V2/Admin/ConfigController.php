@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ConfigSave;
 use App\Models\SubscribeTemplate;
 use App\Services\MailService;
+use App\Services\OffenseService;
 use App\Services\TelegramService;
 use App\Services\ThemeService;
 use App\Utils\Dict;
@@ -146,6 +147,9 @@ class ConfigController extends Controller
                 'device_limit_mode' => (int) admin_setting('device_limit_mode', 0),
                 'server_ws_enable' => (bool) admin_setting('server_ws_enable', 1),
                 'server_ws_url' => admin_setting('server_ws_url', ''),
+            ],
+            'torrent' => [
+                'torrent_offense_policy' => $this->decodeTorrentPolicy(),
             ],
             'email' => [
                 'email_host' => admin_setting('email_host'),
@@ -297,5 +301,21 @@ class ConfigController extends Controller
         }
 
         return $baseUrl . '/api/v1/guest/telegram/webhook';
+    }
+
+    private function decodeTorrentPolicy(): array
+    {
+        $raw = admin_setting('torrent_offense_policy');
+        if (is_string($raw)) {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                return OffenseService::normalizePolicy($decoded);
+            }
+        }
+        if (is_array($raw)) {
+            return OffenseService::normalizePolicy($raw);
+        }
+
+        return OffenseService::defaultTorrentPolicy();
     }
 }

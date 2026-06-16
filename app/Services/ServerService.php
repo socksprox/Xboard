@@ -109,6 +109,15 @@ class ServerService
                 'device_limit'
             ])
             ->get();
+
+        $restrictedIds = UserRestrictionService::restrictedUserIdsForServer(
+            $node->id,
+            $users->pluck('id')
+        );
+        if (!empty($restrictedIds)) {
+            $users = $users->filter(fn ($u) => !isset($restrictedIds[(int) $u->id]));
+        }
+
         return HookManager::filter('server.users.get', $users, $node);
     }
 

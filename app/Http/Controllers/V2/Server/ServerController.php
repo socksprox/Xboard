@@ -4,6 +4,7 @@ namespace App\Http\Controllers\V2\Server;
 
 use App\Http\Controllers\Controller;
 use App\Services\ServerService;
+use App\Services\TorrentModeService;
 use App\WebSocket\NodeWorker;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -16,6 +17,11 @@ class ServerController extends Controller
      */
     public function handshake(Request $request): JsonResponse
     {
+        $node = $request->attributes->get('node_info');
+        if ($node !== null && $request->filled('torrent_mode')) {
+            TorrentModeService::syncFromNode($node, $request->input('torrent_mode'));
+        }
+
         $websocket = ['enabled' => false];
 
         if ((bool) admin_setting('server_ws_enable', 1) && Cache::has(NodeWorker::HEARTBEAT_CACHE_KEY)) {
@@ -47,6 +53,10 @@ class ServerController extends Controller
         $node = $request->attributes->get('node_info');
 
         ServerService::touchNode($node);
+
+        if ($request->filled('torrent_mode')) {
+            TorrentModeService::syncFromNode($node, $request->input('torrent_mode'));
+        }
 
         $traffic = $request->input('traffic');
         if (is_array($traffic) && !empty($traffic)) {
