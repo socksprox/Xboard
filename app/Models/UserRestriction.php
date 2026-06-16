@@ -13,6 +13,8 @@ class UserRestriction extends Model
 
     protected $table = 'v2_user_restriction';
 
+    protected $dateFormat = 'U';
+
     protected $guarded = ['id'];
 
     protected $casts = [

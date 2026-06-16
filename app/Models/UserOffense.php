@@ -11,6 +11,8 @@ class UserOffense extends Model
 
     protected $table = 'v2_user_offense';
 
+    protected $dateFormat = 'U';
+
     protected $guarded = ['id'];
 
     protected $casts = [
