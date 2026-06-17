@@ -115,7 +115,9 @@ class ServerService
             $users->pluck('id')
         );
         if (!empty($restrictedIds)) {
-            $users = $users->filter(fn ($u) => !isset($restrictedIds[(int) $u->id]));
+            $users = $users
+                ->filter(fn ($u) => !isset($restrictedIds[(int) $u->id]))
+                ->values();
         }
 
         return HookManager::filter('server.users.get', $users, $node);
