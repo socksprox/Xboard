@@ -6,6 +6,21 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class OrderSave extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        if (!$this->exists('restart_cycle')) {
+            return;
+        }
+
+        $this->merge([
+            'restart_cycle' => filter_var(
+                $this->input('restart_cycle'),
+                FILTER_VALIDATE_BOOLEAN,
+                FILTER_NULL_ON_FAILURE
+            ) ?? false,
+        ]);
+    }
+
     /**
      * Get the validation rules that apply to the request.
      *
