@@ -66,7 +66,7 @@ class PlanService
         return $plan->show && $plan->sell && $this->hasCapacity($plan);
     }
 
-    public function validatePurchase(User $user, string $period): void
+    public function validatePurchase(User $user, string $period, bool $restartCycle = false): void
     {
         if (!$this->plan) {
             throw new ApiException(__('Subscription plan does not exist'));
@@ -81,7 +81,15 @@ class PlanService
         }
 
         if ($periodKey === Plan::PERIOD_RESET_TRAFFIC) {
+            if ($restartCycle) {
+                throw new ApiException(__('Restart cycle cannot be combined with traffic reset package'));
+            }
             $this->validateResetTrafficPurchase($user);
+            return;
+        }
+
+        if ($restartCycle) {
+            $this->validateRestartCyclePurchase($user, $periodKey);
             return;
         }
 
@@ -147,6 +155,118 @@ class PlanService
         }
     }
 
+    public function validateRestartCyclePurchase(User $user, string $periodKey): void
+    {
+        if (!(int) admin_setting('restart_cycle_enable', 1)) {
+            throw new ApiException(__('Restart cycle is not available'));
+        }
+
+        if ($periodKey === Plan::PERIOD_ONETIME) {
+            throw new ApiException(__('Restart cycle is not available for one-time plans'));
+        }
+
+        if ($user->plan_id === null || (int) $user->plan_id !== (int) $this->plan->id) {
+            throw new ApiException(__('Restart cycle is only available for your current subscription plan'));
+        }
+
+        if ($user->expired_at === null || $user->expired_at <= time()) {
+            throw new ApiException(__('Restart cycle requires an active subscription'));
+        }
+
+        if (!$this->plan->renew) {
+            throw new ApiException(__('This subscription cannot be restarted, please change to another subscription'));
+        }
+
+        if ((int) admin_setting('restart_cycle_require_depleted', 1) && !$this->isUserDepleted($user)) {
+            throw new ApiException(__('Restart cycle is only available when data is depleted'));
+        }
+    }
+
+    public function isUserDepleted(User $user): bool
+    {
+        $cap = (int) $user->transfer_enable;
+        if ($cap <= 0) {
+            return false;
+        }
+
+        $threshold = (int) admin_setting('restart_cycle_depleted_threshold', 100);
+        $usedPercent = (($user->u ?? 0) + ($user->d ?? 0)) / $cap * 100;
+
+        return $usedPercent >= $threshold;
+    }
+
+    public function getUsagePercent(User $user): float
+    {
+        $cap = (int) $user->transfer_enable;
+        if ($cap <= 0) {
+            return 0.0;
+        }
+
+        return round((($user->u ?? 0) + ($user->d ?? 0)) / $cap * 100, 2);
+    }
+
+    /**
+     * @return array{0: bool, 1: string|null}
+     */
+    public function canExtend(User $user): array
+    {
+        if ((int) $user->plan_id !== (int) $this->plan->id) {
+            return [false, 'different_plan'];
+        }
+
+        if ($user->expired_at !== null && $user->expired_at <= time()) {
+            return [false, 'subscription_expired'];
+        }
+
+        if (!$this->plan->renew) {
+            return [false, 'renew_disabled'];
+        }
+
+        try {
+            $this->validatePlanAvailability($user);
+        } catch (ApiException $e) {
+            return [false, $e->getMessage()];
+        }
+
+        return [true, null];
+    }
+
+    /**
+     * @return array{0: bool, 1: string|null}
+     */
+    public function canRestart(User $user): array
+    {
+        if (!(int) admin_setting('restart_cycle_enable', 1)) {
+            return [false, 'restart_disabled'];
+        }
+
+        try {
+            $this->validateRestartCyclePurchase($user, Plan::PERIOD_MONTHLY);
+        } catch (ApiException $e) {
+            return [false, $e->getMessage()];
+        }
+
+        return [true, null];
+    }
+
+    /**
+     * @return array{0: bool, 1: string|null}
+     */
+    public function canUserResetTraffic(User $user): array
+    {
+        if (!$this->planSupportsResetTraffic()) {
+            return [false, 'reset_not_available'];
+        }
+
+        try {
+            $this->validateResetTrafficPurchase($user);
+        } catch (ApiException $e) {
+            return [false, $e->getMessage()];
+        }
+
+        return [true, null];
+    }
+
     protected function validatePlanAvailability(User $user): void
     {
         if ((!$this->plan->show && !$this->plan->renew) || (!$this->plan->show && $user->plan_id !== $this->plan->id)) {
@@ -184,6 +304,12 @@ class PlanService
             $plan->getActivePeriods(),
             fn($period) => isset($plan->prices[$period]) && $plan->prices[$period] > 0
         );
+    }
+
+    public function planSupportsResetTraffic(): bool
+    {
+        return $this->plan->reset_traffic_method !== Plan::RESET_TRAFFIC_NEVER
+            && $this->plan->getResetTrafficPrice() > 0;
     }
 
     public function canResetTraffic(Plan $plan): bool

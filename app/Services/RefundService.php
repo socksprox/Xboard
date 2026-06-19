@@ -214,6 +214,13 @@ class RefundService
             }
         }
 
+        if ((int) $order->type === Order::TYPE_RESTART_CYCLE && $user->expired_at <= time()) {
+            if ((int) $user->plan_id === (int) $order->plan_id) {
+                $user->plan_id = null;
+                $user->group_id = null;
+            }
+        }
+
         $user->save();
     }
 }

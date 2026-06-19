@@ -237,6 +237,13 @@ class OrderController extends Controller
 
             if (PlanService::getPeriodKey((string) $order->period) === Plan::PERIOD_RESET_TRAFFIC) {
                 $order->type = Order::TYPE_RESET_TRAFFIC;
+            } else if (
+                filter_var($request->input('restart_cycle', false), FILTER_VALIDATE_BOOLEAN)
+                && $user->plan_id !== null
+                && (int) $order->plan_id === (int) $user->plan_id
+                && $user->expired_at > time()
+            ) {
+                $order->type = Order::TYPE_RESTART_CYCLE;
             } else if ($user->plan_id !== NULL && $order->plan_id !== $user->plan_id) {
                 $order->type = Order::TYPE_UPGRADE;
             } else if ($user->expired_at > time() && $order->plan_id == $user->plan_id) {
@@ -244,6 +251,8 @@ class OrderController extends Controller
             } else {
                 $order->type = Order::TYPE_NEW_PURCHASE;
             }
+
+            $orderService->restartCycle = (int) $order->type === Order::TYPE_RESTART_CYCLE;
 
             $orderService->setInvite($user);
 

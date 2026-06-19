@@ -4,6 +4,7 @@ namespace App\Http\Controllers\V1\User;
 
 use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\User\OrderOptionsRequest;
 use App\Http\Requests\User\OrderSave;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
@@ -15,12 +16,17 @@ use App\Services\CouponService;
 use App\Services\OrderService;
 use App\Services\PaymentService;
 use App\Services\PlanService;
+use App\Services\PurchaseOptionsService;
 use App\Services\UserService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
+    public function __construct(
+        private readonly PurchaseOptionsService $purchaseOptionsService,
+    ) {}
+
     public function fetch(Request $request)
     {
         $request->validate([
@@ -65,6 +71,14 @@ class OrderController extends Controller
         return $this->success(OrderResource::make($order));
     }
 
+    public function options(OrderOptionsRequest $request)
+    {
+        $user = User::findOrFail($request->user()->id);
+        $plan = Plan::findOrFail($request->input('plan_id'));
+
+        return $this->success($this->purchaseOptionsService->buildForUser($user, $plan));
+    }
+
     public function save(OrderSave $request)
     {
         $request->validate([
@@ -81,14 +95,21 @@ class OrderController extends Controller
 
         $plan = Plan::findOrFail($request->input('plan_id'));
         $planService = new PlanService($plan);
+        $restartCycle = $request->wantsRestartCycle();
 
-        $planService->validatePurchase($user, $request->input('period'));
+        $planService->validatePurchase($user, $request->input('period'), $restartCycle);
+
+        if ($restartCycle) {
+            $purchaseOptions = $this->purchaseOptionsService->buildForUser($user, $plan);
+            $this->purchaseOptionsService->assertRestartAvailable($purchaseOptions, $request->input('period'));
+        }
 
         $order = OrderService::createFromRequest(
             $user,
             $plan,
             $request->input('period'),
-            $request->input('coupon_code')
+            $request->input('coupon_code'),
+            $restartCycle,
         );
 
         return $this->success($order->trade_no);

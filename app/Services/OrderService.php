@@ -27,6 +27,7 @@ class OrderService
     ];
     public $order;
     public $user;
+    public bool $restartCycle = false;
 
     public function __construct(Order $order)
     {
@@ -48,14 +49,15 @@ class OrderService
         Plan $plan,
         string $period,
         ?string $couponCode = null,
+        bool $restartCycle = false,
     ): Order {
         $userService = app(UserService::class);
         $planService = new PlanService($plan);
 
-        $planService->validatePurchase($user, $period);
-        HookManager::call('order.create.before', [$user, $plan, $period, $couponCode]);
+        $planService->validatePurchase($user, $period, $restartCycle);
+        HookManager::call('order.create.before', [$user, $plan, $period, $couponCode, $restartCycle]);
 
-        return DB::transaction(function () use ($user, $plan, $period, $couponCode, $userService) {
+        return DB::transaction(function () use ($user, $plan, $period, $couponCode, $userService, $restartCycle) {
             $newPeriod = PlanService::getPeriodKey($period);
 
             $order = new Order([
@@ -67,6 +69,7 @@ class OrderService
             ]);
 
             $orderService = new self($order);
+            $orderService->restartCycle = $restartCycle;
 
             if ($couponCode) {
                 $orderService->applyCoupon($couponCode);
@@ -132,9 +135,10 @@ class OrderService
         });
 
         $eventId = match ((int) $order->type) {
-            Order::STATUS_PROCESSING => admin_setting('new_order_event_id', 0),
+            Order::TYPE_NEW_PURCHASE => admin_setting('new_order_event_id', 0),
             Order::TYPE_RENEWAL => admin_setting('renew_order_event_id', 0),
             Order::TYPE_UPGRADE => admin_setting('change_order_event_id', 0),
+            Order::TYPE_RESTART_CYCLE => admin_setting('restart_order_event_id', 0),
             default => 0,
         };
 
@@ -151,6 +155,14 @@ class OrderService
         $order = $this->order;
         if ($order->period === Plan::PERIOD_RESET_TRAFFIC) {
             $order->type = Order::TYPE_RESET_TRAFFIC;
+        } else if (
+            $this->restartCycle
+            && $user->plan_id !== null
+            && (int) $order->plan_id === (int) $user->plan_id
+            && $user->expired_at !== null
+            && $user->expired_at > time()
+        ) {
+            $order->type = Order::TYPE_RESTART_CYCLE;
         } else if ($user->plan_id !== NULL && $order->plan_id !== $user->plan_id && ($user->expired_at > time() || $user->expired_at === NULL)) {
             if (!(int) admin_setting('plan_change_enable', 1))
                 throw new ApiException('目前不允许更改订阅，请联系客服或提交工单操作');
@@ -340,6 +352,15 @@ class OrderService
 
     private function buyByPeriod(Order $order, Plan $plan)
     {
+        if ((int) $order->type === Order::TYPE_RESTART_CYCLE) {
+            app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER);
+            $this->user->transfer_enable = $plan->transfer_enable * 1073741824;
+            $this->user->plan_id = $plan->id;
+            $this->user->group_id = $plan->group_id;
+            $this->user->expired_at = self::calculateExpiredAt($order->period, time());
+            return;
+        }
+
         // change plan process
         if ((int) $order->type === Order::TYPE_UPGRADE) {
             $this->user->expired_at = time();
@@ -350,7 +371,7 @@ class OrderService
             app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER);
         $this->user->plan_id = $plan->id;
         $this->user->group_id = $plan->group_id;
-        $this->user->expired_at = $this->getTime($order->period, $this->user->expired_at);
+        $this->user->expired_at = self::calculateExpiredAt($order->period, $this->user->expired_at);
     }
 
     private function buyByOneTime(Plan $plan)
@@ -365,13 +386,13 @@ class OrderService
     /**
      * 计算套餐到期时间
      * @param string $periodKey
-     * @param int $timestamp
+     * @param int|null $timestamp
      * @return int
      * @throws ApiException
      */
-    private function getTime(string $periodKey, ?int $timestamp = null): int
+    public static function calculateExpiredAt(string $periodKey, ?int $timestamp = null): int
     {
-        $timestamp = $timestamp < time() ? time() : $timestamp;
+        $timestamp = ($timestamp === null || $timestamp < time()) ? time() : $timestamp;
         $periodKey = PlanService::getPeriodKey($periodKey);
 
         if (isset(self::STR_TO_TIME[$periodKey])) {
