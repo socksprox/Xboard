@@ -99,11 +99,6 @@ class OrderController extends Controller
 
         $planService->validatePurchase($user, $request->input('period'), $restartCycle);
 
-        if ($restartCycle) {
-            $purchaseOptions = $this->purchaseOptionsService->buildForUser($user, $plan);
-            $this->purchaseOptionsService->assertRestartAvailable($purchaseOptions, $request->input('period'));
-        }
-
         $order = OrderService::createFromRequest(
             $user,
             $plan,

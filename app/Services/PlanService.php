@@ -9,6 +9,9 @@ use Illuminate\Database\Eloquent\Collection;
 
 class PlanService
 {
+    private const TRAFFIC_RESET_USAGE_TAG_PATTERN = '/^traffic_reset_usage=(\d+(?:\.\d+)?)$/i';
+    private const DEFAULT_RESET_USAGE_PERCENT_THRESHOLD = 80;
+
     public Plan $plan;
 
     public function __construct(Plan $plan)
@@ -66,7 +69,7 @@ class PlanService
         return $plan->show && $plan->sell && $this->hasCapacity($plan);
     }
 
-    public function validatePurchase(User $user, string $period, bool $restartCycle = false): void
+    public function validatePurchase(User $user, string $period, bool $restartCycle = false, bool $enforceResetUsageRule = true): void
     {
         if (!$this->plan) {
             throw new ApiException(__('Subscription plan does not exist'));
@@ -84,7 +87,7 @@ class PlanService
             if ($restartCycle) {
                 throw new ApiException(__('Restart cycle cannot be combined with traffic reset package'));
             }
-            $this->validateResetTrafficPurchase($user);
+            $this->validateResetTrafficPurchase($user, $enforceResetUsageRule);
             return;
         }
 
@@ -148,10 +151,18 @@ class PlanService
         return $flipped[$period] ?? $period;
     }
 
-    protected function validateResetTrafficPurchase(User $user): void
+    protected function validateResetTrafficPurchase(User $user, bool $enforceUsageRule = true): void
     {
         if (!app(UserService::class)->isAvailable($user) || $this->plan->id !== $user->plan_id) {
             throw new ApiException(__('Subscription has expired or no active subscription, unable to purchase Data Reset Package'));
+        }
+
+        if (!$this->planSupportsResetTraffic()) {
+            throw new ApiException(__('This subscription does not support traffic reset packages'));
+        }
+
+        if ($enforceUsageRule && !$this->meetsTrafficResetUsageRule($user)) {
+            throw new ApiException(__('Traffic reset package is not available until usage threshold is reached'));
         }
     }
 
@@ -302,17 +313,75 @@ class PlanService
     {
         return array_filter(
             $plan->getActivePeriods(),
-            fn($period) => isset($plan->prices[$period]) && $plan->prices[$period] > 0
+            fn(string $periodKey) => isset($plan->prices[$periodKey]) && $plan->prices[$periodKey] > 0,
+            ARRAY_FILTER_USE_KEY
         );
+    }
+
+    /**
+     * Subscription billing periods available for extend/restart previews and orders.
+     *
+     * @return array<string, string> period key => legacy period key
+     */
+    public function getPurchasableSubscriptionPeriods(): array
+    {
+        $periods = [];
+
+        foreach (array_keys($this->plan->getActivePeriods()) as $periodKey) {
+            if (in_array($periodKey, [Plan::PERIOD_ONETIME, Plan::PERIOD_RESET_TRAFFIC], true)) {
+                continue;
+            }
+
+            $periods[$periodKey] = self::getLegacyPeriod($periodKey);
+        }
+
+        return $periods;
     }
 
     public function planSupportsResetTraffic(): bool
     {
-        return $this->plan->reset_traffic_method !== Plan::RESET_TRAFFIC_NEVER
-            && $this->plan->getResetTrafficPrice() > 0;
+        return self::canResetTraffic($this->plan);
     }
 
-    public function canResetTraffic(Plan $plan): bool
+    public function meetsTrafficResetUsageRule(User $user): bool
+    {
+        $cap = (int) $user->transfer_enable;
+        if ($cap <= 0) {
+            return false;
+        }
+
+        $usedPercent = (($user->u ?? 0) + ($user->d ?? 0)) / $cap * 100;
+        if ($usedPercent >= self::DEFAULT_RESET_USAGE_PERCENT_THRESHOLD) {
+            return true;
+        }
+
+        $thresholdGb = $this->parseTrafficResetUsageThresholdGb();
+        if ($thresholdGb === null) {
+            return false;
+        }
+
+        $usedGb = (($user->u ?? 0) + ($user->d ?? 0)) / 1073741824;
+
+        return $usedGb >= $thresholdGb;
+    }
+
+    public function parseTrafficResetUsageThresholdGb(): ?float
+    {
+        $tags = $this->plan->tags ?? [];
+        if (!is_array($tags)) {
+            return null;
+        }
+
+        foreach ($tags as $tag) {
+            if (preg_match(self::TRAFFIC_RESET_USAGE_TAG_PATTERN, (string) $tag, $matches)) {
+                return (float) $matches[1];
+            }
+        }
+
+        return null;
+    }
+
+    public static function canResetTraffic(Plan $plan): bool
     {
         return $plan->reset_traffic_method !== Plan::RESET_TRAFFIC_NEVER
             && $plan->getResetTrafficPrice() > 0;

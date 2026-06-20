@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Services;
 
+use App\Exceptions\ApiException;
 use App\Models\Order;
 use App\Models\Plan;
 use App\Models\User;
 use App\Services\OrderService;
+use App\Services\PlanService;
 use App\Services\PurchaseOptionsService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -108,6 +110,72 @@ final class RestartCycleTest extends TestCase
         $this->assertTrue($options['intents']['extend']['available']);
     }
 
+    public function test_reset_traffic_requires_usage_threshold_for_users(): void
+    {
+        $plan = $this->createPlan();
+        $user = $this->createUser($plan, depleted: false, remainingDays: 20);
+
+        $planService = new PlanService($plan);
+
+        $this->expectException(ApiException::class);
+        $planService->validatePurchase($user, 'reset_price');
+    }
+
+    public function test_reset_traffic_allowed_when_depleted(): void
+    {
+        $plan = $this->createPlan();
+        $user = $this->createUser($plan, depleted: true, remainingDays: 20);
+
+        $planService = new PlanService($plan);
+        $planService->validatePurchase($user, 'reset_price');
+
+        $this->addToAssertionCount(1);
+    }
+
+    public function test_open_restart_cycle_anchors_next_reset_to_new_expiry(): void
+    {
+        $plan = $this->createPlan();
+        $oldExpiry = Carbon::now()->addDays(20)->startOfDay()->addHours(12);
+        $user = $this->createUser($plan, depleted: true, remainingDays: 20, expiredAt: $oldExpiry);
+
+        $order = Order::query()->create([
+            'user_id' => $user->id,
+            'plan_id' => $plan->id,
+            'period' => Plan::PERIOD_MONTHLY,
+            'type' => Order::TYPE_RESTART_CYCLE,
+            'trade_no' => 'test-restart-' . uniqid(),
+            'total_amount' => 999,
+            'status' => Order::STATUS_PROCESSING,
+            'created_at' => time(),
+            'updated_at' => time(),
+        ]);
+
+        (new OrderService($order))->open();
+
+        $user->refresh();
+        $newExpiry = Carbon::createFromTimestamp((int) $user->expired_at);
+        $nextReset = Carbon::createFromTimestamp((int) $user->next_reset_at);
+
+        $this->assertTrue($newExpiry->greaterThan(Carbon::now()->addWeeks(3)));
+        $this->assertNotNull($user->next_reset_at);
+        $this->assertLessThan(
+            abs($nextReset->diffInDays($oldExpiry)),
+            abs($nextReset->diffInDays($newExpiry))
+        );
+    }
+
+    public function test_get_purchasable_subscription_periods_excludes_reset_and_onetime(): void
+    {
+        $plan = $this->createPlan();
+        $planService = new PlanService($plan);
+
+        $periods = $planService->getPurchasableSubscriptionPeriods();
+
+        $this->assertArrayHasKey(Plan::PERIOD_MONTHLY, $periods);
+        $this->assertSame('month_price', $periods[Plan::PERIOD_MONTHLY]);
+        $this->assertArrayNotHasKey(Plan::PERIOD_RESET_TRAFFIC, $periods);
+    }
+
     private function createPlan(): Plan
     {
         return Plan::query()->create([
@@ -129,10 +197,10 @@ final class RestartCycleTest extends TestCase
         ]);
     }
 
-    private function createUser(Plan $plan, bool $depleted, int $remainingDays): User
+    private function createUser(Plan $plan, bool $depleted, int $remainingDays, ?Carbon $expiredAt = null): User
     {
         $capBytes = $plan->transfer_enable * 1073741824;
-        $expiredAt = Carbon::now()->addDays($remainingDays)->timestamp;
+        $expiredAtTimestamp = ($expiredAt ?? Carbon::now()->addDays($remainingDays))->timestamp;
 
         return User::query()->create([
             'email' => uniqid('user', true) . '@example.com',
@@ -144,7 +212,7 @@ final class RestartCycleTest extends TestCase
             'transfer_enable' => $capBytes,
             'u' => $depleted ? $capBytes : 0,
             'd' => 0,
-            'expired_at' => $expiredAt,
+            'expired_at' => $expiredAtTimestamp,
             'created_at' => time(),
             'updated_at' => time(),
         ]);

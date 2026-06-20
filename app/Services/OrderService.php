@@ -353,11 +353,13 @@ class OrderService
     private function buyByPeriod(Order $order, Plan $plan)
     {
         if ((int) $order->type === Order::TYPE_RESTART_CYCLE) {
-            app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER);
-            $this->user->transfer_enable = $plan->transfer_enable * 1073741824;
             $this->user->plan_id = $plan->id;
             $this->user->group_id = $plan->group_id;
+            $this->user->transfer_enable = $plan->transfer_enable * 1073741824;
+            // Set the new billing period before resetting traffic so next_reset_at
+            // is anchored to the restarted subscription expiry, not the old one.
             $this->user->expired_at = self::calculateExpiredAt($order->period, time());
+            app(TrafficResetService::class)->performReset($this->user, TrafficResetLog::SOURCE_ORDER);
             return;
         }
 

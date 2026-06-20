@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\V2\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Exceptions\ApiException;
 use App\Http\Requests\Admin\OrderAssign;
 use App\Http\Requests\Admin\OrderUpdate;
 use App\Models\Order;
@@ -226,34 +227,21 @@ class OrderController extends Controller
 
         try {
             DB::beginTransaction();
+            $period = (string) $request->input('period');
+            $restartCycle = filter_var($request->input('restart_cycle', false), FILTER_VALIDATE_BOOLEAN);
+            $planService = new PlanService($plan);
+            $planService->validatePurchase($user, $period, $restartCycle, enforceResetUsageRule: false);
+
             $order = new Order();
             $orderService = new OrderService($order);
             $order->user_id = $user->id;
             $order->plan_id = $plan->id;
-            $period = $request->input('period');
-            $order->period = PlanService::getPeriodKey((string) $period);
+            $order->period = PlanService::getPeriodKey($period);
             $order->trade_no = Helper::guid();
             $order->total_amount = $request->input('total_amount');
 
-            if (PlanService::getPeriodKey((string) $order->period) === Plan::PERIOD_RESET_TRAFFIC) {
-                $order->type = Order::TYPE_RESET_TRAFFIC;
-            } else if (
-                filter_var($request->input('restart_cycle', false), FILTER_VALIDATE_BOOLEAN)
-                && $user->plan_id !== null
-                && (int) $order->plan_id === (int) $user->plan_id
-                && $user->expired_at > time()
-            ) {
-                $order->type = Order::TYPE_RESTART_CYCLE;
-            } else if ($user->plan_id !== NULL && $order->plan_id !== $user->plan_id) {
-                $order->type = Order::TYPE_UPGRADE;
-            } else if ($user->expired_at > time() && $order->plan_id == $user->plan_id) {
-                $order->type = Order::TYPE_RENEWAL;
-            } else {
-                $order->type = Order::TYPE_NEW_PURCHASE;
-            }
-
-            $orderService->restartCycle = (int) $order->type === Order::TYPE_RESTART_CYCLE;
-
+            $orderService->restartCycle = $restartCycle;
+            $orderService->setOrderType($user);
             $orderService->setInvite($user);
 
             if (!$order->save()) {
@@ -261,6 +249,9 @@ class OrderController extends Controller
                 return $this->fail([500, '订单创建失败']);
             }
             DB::commit();
+        } catch (ApiException $e) {
+            DB::rollBack();
+            return $this->fail([400, $e->getMessage()]);
         } catch (\Exception $e) {
             DB::rollBack();
             throw $e;

@@ -8,6 +8,7 @@ use App\Models\Payment;
 use App\Models\Plan;
 use App\Models\Refund;
 use App\Models\User;
+use App\Services\TrafficResetService;
 use App\Services\Plugin\HookManager;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -219,6 +220,12 @@ class RefundService
                 $user->plan_id = null;
                 $user->group_id = null;
             }
+        }
+
+        if ($user->plan_id !== null && $user->expired_at !== null && $user->expired_at > time()) {
+            $user->loadMissing('plan');
+            $nextReset = app(TrafficResetService::class)->calculateNextResetTime($user);
+            $user->next_reset_at = $nextReset?->timestamp;
         }
 
         $user->save();

@@ -11,15 +11,6 @@ use App\Utils\Helper;
 
 final class PurchaseOptionsService
 {
-    private const SUBSCRIPTION_PERIOD_KEYS = [
-        Plan::PERIOD_MONTHLY,
-        Plan::PERIOD_QUARTERLY,
-        Plan::PERIOD_HALF_YEARLY,
-        Plan::PERIOD_YEARLY,
-        Plan::PERIOD_TWO_YEARLY,
-        Plan::PERIOD_THREE_YEARLY,
-    ];
-
     public function __construct(
         private readonly UserService $userService,
     ) {}
@@ -54,7 +45,7 @@ final class PurchaseOptionsService
         $extendPeriods = [];
         $restartPeriods = [];
 
-        foreach ($this->getPurchasableSubscriptionPeriods($plan) as $periodKey => $legacyKey) {
+        foreach ($planService->getPurchasableSubscriptionPeriods() as $periodKey => $legacyKey) {
             $priceCents = (int) round($plan->prices[$periodKey] * 100);
 
             if ($extendAvailable) {
@@ -254,24 +245,6 @@ final class PurchaseOptionsService
         }
 
         return null;
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function getPurchasableSubscriptionPeriods(Plan $plan): array
-    {
-        $periods = [];
-
-        foreach (self::SUBSCRIPTION_PERIOD_KEYS as $periodKey) {
-            if (!isset($plan->prices[$periodKey]) || $plan->prices[$periodKey] <= 0) {
-                continue;
-            }
-
-            $periods[$periodKey] = PlanService::getLegacyPeriod($periodKey);
-        }
-
-        return $periods;
     }
 
     private function remainingDays(User $user): int
