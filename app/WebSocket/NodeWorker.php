@@ -191,6 +191,9 @@ class NodeWorker
             return;
         }
 
+        // Resolve by code or id for auth, but registry/sync/cache always use canonical id.
+        $nodeId = (int) $node->id;
+
         $conn->nodeId = $nodeId;
         NodeRegistry::add($nodeId, $conn);
         Cache::put("node_ws_alive:{$nodeId}", true, 86400);
@@ -198,6 +201,7 @@ class NodeWorker
         app(DeviceStateService::class)->clearAllNodeDevices($nodeId);
 
         Log::debug("[WS] Node#{$nodeId} connected", [
+            'code' => $node->code,
             'remote' => $conn->getRemoteIp(),
             'total' => NodeRegistry::count(),
         ]);
