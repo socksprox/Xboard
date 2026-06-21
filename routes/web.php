@@ -1,7 +1,10 @@
 <?php
 
+use App\Http\Resources\PlanResource;
+use App\Services\PlanService;
 use App\Services\ThemeService;
 use App\Services\UpdateService;
+use App\Support\PlanSeo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
@@ -55,13 +58,24 @@ Route::get('/', function (Request $request) {
             Log::info('Theme initialized in public directory', ['theme' => $theme]);
         }
 
+        $plans = PlanResource::collection(
+            app(PlanService::class)->getAvailablePlans()
+        )->resolve();
+
+        $appUrl = admin_setting('app_url') ?: $request->getSchemeAndHttpHost();
+        $currency = admin_setting('currency', 'CNY');
+
         $renderParams = [
             'title' => admin_setting('app_name', 'Xboard'),
             'theme' => $theme,
             'version' => app(UpdateService::class)->getCurrentVersion(),
             'description' => admin_setting('app_description', 'Xboard is best'),
             'logo' => admin_setting('logo'),
-            'theme_config' => $themeService->getConfig($theme)
+            'theme_config' => $themeService->getConfig($theme),
+            'plans' => $plans,
+            'plan_period_labels' => PlanSeo::PERIOD_LABELS,
+            'currency_symbol' => admin_setting('currency_symbol', '¥'),
+            'plans_json_ld' => PlanSeo::buildJsonLd($plans, admin_setting('app_name', 'Xboard'), $appUrl, $currency),
         ];
         return view('theme::' . $theme . '.dashboard', $renderParams);
     } catch (Exception $e) {
