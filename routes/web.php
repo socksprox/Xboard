@@ -62,20 +62,22 @@ Route::get('/', function (Request $request) {
             app(PlanService::class)->getAvailablePlans()
         )->resolve();
 
-        $appUrl = admin_setting('app_url') ?: $request->getSchemeAndHttpHost();
+        $appUrl = $request->getSchemeAndHttpHost();
         $currency = admin_setting('currency', 'CNY');
+        $currencySymbol = admin_setting('currency_symbol', '¥');
+        $appName = admin_setting('app_name', 'Xboard');
 
         $renderParams = [
-            'title' => admin_setting('app_name', 'Xboard'),
+            'title' => $appName,
             'theme' => $theme,
             'version' => app(UpdateService::class)->getCurrentVersion(),
             'description' => admin_setting('app_description', 'Xboard is best'),
             'logo' => admin_setting('logo'),
             'theme_config' => $themeService->getConfig($theme),
-            'plans' => $plans,
-            'plan_period_labels' => PlanSeo::PERIOD_LABELS,
-            'currency_symbol' => admin_setting('currency_symbol', '¥'),
-            'plans_json_ld' => PlanSeo::buildJsonLd($plans, admin_setting('app_name', 'Xboard'), $appUrl, $currency),
+            'plans_seo' => PlanSeo::buildSeoSummaries($plans, $currencySymbol),
+            'plans_preload' => PlanSeo::buildPreloadPlans($plans),
+            'currency_symbol' => $currencySymbol,
+            'plans_json_ld' => PlanSeo::buildJsonLd($plans, $appName, $appUrl, $currency),
         ];
         return view('theme::' . $theme . '.dashboard', $renderParams);
     } catch (Exception $e) {
