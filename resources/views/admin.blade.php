@@ -13,6 +13,12 @@
       logo: "{{ $logo }}",
       secure_path: "{{ $secure_path }}",
     };
+    window.shadowflyAdmin = {
+      embedded: true,
+      secure_path: @json($secure_path),
+      title: @json($title),
+      logo: @json($logo),
+    };
   </script>
   @php
     $manifestPath = public_path('assets/admin/manifest.json');
